@@ -44,9 +44,9 @@ that file is **not present in this repository** [verified].
 
 ## Commit Conventions
 
-`Unknown`. This directory is **not a git repository** [verified], so
-`commit: unavailable` and there is no history from which to derive a commit
-message style.
+`Unknown`. The repository was initialized on 2026-09-12 and contains a single
+commit [verified] — not enough history to derive a commit message style from.
+Re-check this section once a handful of commits exist.
 
 ## Notes
 

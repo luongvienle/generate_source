@@ -58,7 +58,10 @@ location. The spec names no build tooling either.
     └── harness/                  this harness
 ```
 
-Single directory, no monorepo markers detected [verified]. Not a git repository
+Single directory, no monorepo markers detected [verified]. Git repository
+initialized on 2026-09-12 with `.claude/harness/` as its first commit
+[verified]; `knowledge-explorer-spec.md` is present but untracked, and
+`.claude/settings.local.json` is excluded by the user's global gitignore
 [verified]. No submodules or nested repositories [verified].
 
 **Planned layout**, spec §11 `[declared]` — none of these paths exist yet

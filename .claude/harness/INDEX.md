@@ -1,6 +1,6 @@
 ---
 generated_at: 2026-09-12
-commit: unavailable
+commit: cb94ff7
 generator_version: 0.6.0
 project_name: create_source
 ---
@@ -68,14 +68,12 @@ this harness as a map of what exists versus what is merely intended.
 
 **Unknown — repository and process**
 
-- Commit conventions — this is not a git repository, so `commit: unavailable`
-  and there is no history to derive style from [verified].
+- Commit conventions — the repository was initialized on 2026-09-12 and has a
+  single commit [verified], which is not enough history to derive a style from.
 - The companion document `knowledge-explorer-design.md` (Vietnamese),
   referenced in the spec header, is **not present in this repository**
   [verified]. Its rationale content is therefore unavailable to consumers of
   this harness.
-- Whether `.claude/harness/` should be version-controlled — undecidable here,
-  as the project is not under git [verified].
 
 **Unknown — product decisions the spec leaves open (§14)**
 
