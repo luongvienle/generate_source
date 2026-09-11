@@ -1,3 +1,9 @@
+import { config as loadEnv } from 'dotenv';
+
+// Next reads .env from this app's directory; the repository keeps a single
+// .env at the root, so load it before the config is evaluated.
+loadEnv({ path: '../../.env' });
+
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {

@@ -76,7 +76,7 @@ state, so update it as you go rather than at the end.
   - done when: a unit test asserts the logged line contains the URL, and that
     the implementation opens no network connection.
 
-- [ ] **Task 10: Magic-link sign-in end to end** — first demonstrable behavior
+- [x] **Task 10: Magic-link sign-in end to end** — first demonstrable behavior
   `apps/admin-web` Next.js shell, the Auth.js route handler wired to the Prisma
   adapter and the email provider, and an unstyled sign-in page.
   - done when: requesting a link for a seeded `admin_owner` writes a URL to the
@@ -190,7 +190,7 @@ Recorded 2026-09-12, after tasks 1–7. Read these before continuing at task 8.
 
 ## Progress notes, part two
 
-Recorded 2026-09-12, after tasks 8-9 and 11-17. **Task 10 is the only one left.**
+Recorded 2026-09-12, after tasks 8-9 and 11-17. Task 10 followed; see part three.
 
 **Task 10 is blocked on a version decision, not on effort.** `next-auth` latest
 is 4.24.15; Auth.js v5 is still `5.0.0-beta.32`, and `@auth/prisma-adapter`
@@ -237,3 +237,42 @@ on which library writes them.
   endpoint became unusable rather than open — deny-by-default fired, which is
   the correct fail-closed behavior.
 - Both mutations reverted; no residue remains.
+
+---
+
+## Progress notes, part three
+
+Recorded 2026-09-12. **All 17 tasks complete.**
+
+**Task 10 — Auth.js v5 beta, pinned exactly.** `next-auth@5.0.0-beta.32` with
+`@auth/prisma-adapter@2.11.3`, chosen over stable v4 for App Router support.
+Both are pinned to exact versions, not ranges: a beta's API churns between
+releases, so `pnpm up` on these two needs deliberate review.
+
+**The hashing coupling is resolved, empirically.** Part two flagged that
+`InvitationService` mints tokens as `sha256(token + AUTH_SECRET)` and that
+Auth.js had to agree or API-minted invitations would be unusable. It does —
+verified by comparing a real Auth.js-issued token against the same computation.
+`scripts/verify-magic-link.sh` now asserts this on every run, so an upgrade
+that changes the scheme fails loudly instead of silently breaking invitations.
+
+**Verification row 2 is no longer a todo.** Single-use is covered in three
+places, each where it actually runs:
+- `apps/admin-web/test/verification-token.spec.ts` — adapter level: a consumed
+  token returns null, and a token cannot be redeemed under another identifier.
+- `apps/api/test/rbac.e2e-spec.ts` — the API stores only a 64-hex hash.
+- `scripts/verify-magic-link.sh` — the real HTTP path against a live server:
+  link logged, hash stored, session created, reuse rejected. Not part of
+  `pnpm test` because it needs a built Next server; re-run it after any
+  next-auth upgrade.
+
+**Environment notes**
+- `next start` leaves a `next-server` child that survives `pkill -f "next
+  start"`. Kill by port (`lsof -ti:3000 | xargs kill`) or a stale process will
+  serve an old build and produce confusing 404s.
+- `admin-web/next.config.ts` loads the repository-root `.env` before the config
+  is evaluated, since Next otherwise only reads `.env` from its own directory.
+
+**Final state:** 128 tests across four suites, 10 typecheck tasks, 5 build
+tasks. The full sequence from the spec passes, and the database is left with no
+test rows.

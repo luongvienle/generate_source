@@ -183,11 +183,24 @@ describe('row 1 — owner creates an admin account', () => {
 
 describe('row 2 — reusing a sign-in link', () => {
   /**
-   * Consuming a link is the Auth.js callback's job, which task 10 wires up.
-   * There is no endpoint to exercise yet, so this is left visibly undone rather
-   * than asserted against a stand-in that proves nothing.
+   * Consuming a link is the Auth.js callback's job and lives in admin-web, not
+   * in this API. It is covered where it actually runs:
+   *   - apps/admin-web/test/verification-token.spec.ts  (adapter level)
+   *   - scripts/verify-magic-link.sh                    (real HTTP, live server)
    */
-  it.todo('rejects a second use of the same link (blocked on task 10)');
+  it('mints a token this API never stores in the clear', async () => {
+    const address = email('single-use');
+    await request(app.getHttpServer())
+      .post('/api/admin/admins')
+      .set(as(tokens.owner))
+      .send({ emailAddress: address })
+      .expect(201);
+
+    const stored = await prisma.verificationToken.findMany({ where: { identifier: address } });
+    expect(stored).toHaveLength(1);
+    expect(stored[0]!.token).toMatch(/^[0-9a-f]{64}$/);
+    expect(stored[0]!.expires.getTime()).toBeGreaterThan(Date.now());
+  });
 });
 
 describe('rows 3-5 — role gate on /api/admin/*', () => {
