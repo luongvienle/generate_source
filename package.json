@@ -1,0 +1,22 @@
+{
+  "name": "knowledge-explorer",
+  "version": "0.0.0",
+  "private": true,
+  "packageManager": "pnpm@10.33.4",
+  "engines": {
+    "node": ">=22.0.0 <23.0.0"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "db:generate": "pnpm --filter @knowledge-explorer/database exec prisma generate",
+    "db:migrate": "pnpm --filter @knowledge-explorer/database exec prisma migrate deploy",
+    "verify": "pnpm typecheck && pnpm lint && pnpm test"
+  },
+  "devDependencies": {
+    "turbo": "^2.10.12",
+    "typescript": "5.9.3"
+  }
+}

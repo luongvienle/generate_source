@@ -1,0 +1,13 @@
+{
+  "name": "@knowledge-explorer/ai",
+  "version": "0.0.0",
+  "private": true,
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@knowledge-explorer/shared": "workspace:*"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "name": "@knowledge-explorer/learner-web",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@knowledge-explorer/shared": "workspace:*"
+  }
+}

@@ -1,0 +1,4 @@
+{
+  "extends": "@knowledge-explorer/shared/tsconfig.base.json",
+  "include": ["src", "test"]
+}

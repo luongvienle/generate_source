@@ -1,0 +1,457 @@
+// Schema transcribed from knowledge-explorer-spec.md §8.
+//
+// Fidelity rules, from specs/p0-foundation/spec.md:
+//   - Enum-like columns are String, never Prisma enum (§8 keeps them TEXT and
+//     validates in the application layer; members live in @knowledge-explorer/shared).
+//   - Money is Decimal(12,2), never a float.
+//   - Every timestamp is Timestamptz(6).
+//   - Where §8 omits ON DELETE, NoAction is set explicitly so the emitted DDL
+//     matches §8 rather than Prisma's Restrict/SetNull defaults.
+//   - Partial unique indexes and CHECK constraints cannot be expressed here;
+//     they are hand-written SQL in the initial migration. Do not regenerate it.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Prisma 7 moved the connection URL out of the schema; see prisma.config.ts.
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  // Field names `email`, `name`, `emailVerified` and `image` are dictated by
+  // @auth/prisma-adapter, which writes them by those names. The §8 column names
+  // are preserved through @map, so the database shape is unchanged.
+  email           String    @unique @map("email_address")
+  name            String?   @map("display_name")
+  userRole        String    @default("learner") @map("user_role")
+  isActive        Boolean   @default(true) @map("is_active")
+  createdByUserId String?   @map("created_by_user_id") @db.Uuid
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  // Additive, not in §8: both are required by the Auth.js adapter's User model.
+  emailVerified   DateTime? @map("email_verified") @db.Timestamptz(6)
+  image           String?   @map("image_url")
+
+  createdBy    User?  @relation("UserCreatedBy", fields: [createdByUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  createdUsers User[] @relation("UserCreatedBy")
+
+  importedCourses          Course[]
+  assignedChapters         Chapter[]
+  assignedLessons          Lesson[]
+  editedLessonContents     LessonContent[]
+  createdLessonImages      LessonImage[]
+  reviewedNarrationScripts NarrationScript[]
+  publishedStructures      PublishedCourseStructure[]
+  createdProducts          Product[]
+  accessGrants             AccessGrant[]              @relation("AccessGrantUser")
+  grantedAccessGrants      AccessGrant[]              @relation("AccessGrantGrantedBy")
+  paymentOrders            PaymentOrder[]
+  lessonProgress           LessonProgress[]
+  requestedTopics          TopicRequest[]             @relation("TopicRequestRequestedBy")
+  reviewedTopics           TopicRequest[]             @relation("TopicRequestReviewedBy")
+  topicRequestVotes        TopicRequestVote[]
+  accounts                 Account[]
+  sessions                 Session[]
+
+  @@map("users")
+}
+
+model Category {
+  id            String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  slug          String  @unique
+  displayName   String  @map("display_name")
+  description   String?
+  coverImageUrl String? @map("cover_image_url")
+  displayOrder  Int     @default(0) @map("display_order")
+
+  courses      Course[]
+  products     Product[]
+  accessGrants AccessGrant[]
+
+  @@map("categories")
+}
+
+// One course = one level inside a category. Unit of publishing and enrollment.
+model Course {
+  id                    String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  categoryId            String    @map("category_id") @db.Uuid
+  slug                  String    @unique
+  levelLabel            String    @map("level_label")
+  levelOrder            Int       @map("level_order")
+  title                 String
+  overviewSummary       String?   @map("overview_summary")
+  prerequisites         Json      @default("[]")
+  learningObjectives    Json      @default("[]") @map("learning_objectives")
+  estimatedTotalMinutes Int?      @map("estimated_total_minutes")
+  coverImageUrl         String?   @map("cover_image_url")
+  languageCode          String    @default("vi") @map("language_code")
+  pricingType           String    @default("free") @map("pricing_type")
+  publicationStatus     String    @default("draft") @map("publication_status")
+  hasUnpublishedChanges Boolean   @default(false) @map("has_unpublished_changes")
+  publishedAt           DateTime? @map("published_at") @db.Timestamptz(6)
+  importedByUserId      String?   @map("imported_by_user_id") @db.Uuid
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  category       Category                  @relation(fields: [categoryId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  importedByUser User?                     @relation(fields: [importedByUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  chapters       Chapter[]
+  publishedStructure PublishedCourseStructure?
+  products       Product[]
+  accessGrants   AccessGrant[]
+  linkedTopicRequests TopicRequest[]
+
+  @@unique([categoryId, levelOrder])
+  @@index([publicationStatus, categoryId, levelOrder], map: "idx_courses_catalog")
+  @@map("courses")
+}
+
+model Chapter {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  courseId        String    @map("course_id") @db.Uuid
+  chapterOrder    Int       @map("chapter_order")
+  title           String
+  description     String?
+  assignedAdminId String?   @map("assigned_admin_id") @db.Uuid
+  deletedAt       DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  course        Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  assignedAdmin User?    @relation(fields: [assignedAdminId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  lessons       Lesson[]
+
+  // idx_chapters_order is UNIQUE ... WHERE deleted_at IS NULL — hand-written SQL.
+  @@map("chapters")
+}
+
+model Lesson {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  chapterId         String    @map("chapter_id") @db.Uuid
+  lessonOrder       Int       @map("lesson_order")
+  title             String
+  learningObjective String?   @map("learning_objective")
+  keyPoints         Json      @default("[]") @map("key_points")
+  estimatedMinutes  Int?      @map("estimated_minutes")
+  isFreePreview     Boolean   @default(false) @map("is_free_preview")
+  contentStatus     String    @default("empty") @map("content_status")
+  assignedAdminId   String?   @map("assigned_admin_id") @db.Uuid
+  deletedAt         DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  chapter       Chapter          @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  assignedAdmin User?            @relation(fields: [assignedAdminId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  content       LessonContent?
+  images        LessonImage[]
+  narrationScript NarrationScript?
+  audios        LessonAudio[]
+  progress      LessonProgress[]
+
+  // idx_lessons_order is UNIQUE ... WHERE deleted_at IS NULL — hand-written SQL.
+  @@map("lessons")
+}
+
+// Two tracks: draft is what admins edit, published is what learners read.
+model LessonContent {
+  id                       String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  lessonId                 String    @unique @map("lesson_id") @db.Uuid
+  draftContentMarkdown     String?   @map("draft_content_markdown")
+  draftBlockList           Json?     @map("draft_block_list")
+  draftContentChecksum     String?   @map("draft_content_checksum")
+  publishedContentMarkdown String?   @map("published_content_markdown")
+  publishedBlockList       Json?     @map("published_block_list")
+  lastEditedByUserId       String?   @map("last_edited_by_user_id") @db.Uuid
+  draftUpdatedAt           DateTime? @map("draft_updated_at") @db.Timestamptz(6)
+  publishedAt              DateTime? @map("published_at") @db.Timestamptz(6)
+
+  lesson           Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  lastEditedByUser User?  @relation(fields: [lastEditedByUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("lesson_contents")
+}
+
+model LessonImage {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  lessonId         String   @map("lesson_id") @db.Uuid
+  blockReferenceId String   @map("block_reference_id")
+  figureNumber     Int?     @map("figure_number")
+  imageFileUrl     String   @map("image_file_url")
+  captionText      String   @map("caption_text")
+  alternativeText  String   @map("alternative_text")
+  imageSource      String   @default("ai_generated") @map("image_source")
+  imagePromptText  String?  @map("image_prompt_text")
+  imageModelName   String?  @map("image_model_name")
+  imageProviderName String? @map("image_provider_name")
+  isSelected       Boolean  @default(false) @map("is_selected")
+  createdByUserId  String?  @map("created_by_user_id") @db.Uuid
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  lesson        Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  createdByUser User?  @relation(fields: [createdByUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([lessonId, blockReferenceId], map: "idx_lesson_images_lesson")
+  @@map("lesson_images")
+}
+
+model NarrationScript {
+  id                     String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  lessonId               String    @unique @map("lesson_id") @db.Uuid
+  scriptSegments         Json      @map("script_segments")
+  scriptChecksum         String    @map("script_checksum")
+  sourceContentChecksum  String    @map("source_content_checksum")
+  scriptStatus           String    @default("pending") @map("script_status")
+  generatorModelName     String?   @map("generator_model_name")
+  generatorPromptVersion String?   @map("generator_prompt_version")
+  inputTokenCount        Int?      @map("input_token_count")
+  outputTokenCount       Int?      @map("output_token_count")
+  reviewedByUserId       String?   @map("reviewed_by_user_id") @db.Uuid
+  reviewedAt             DateTime? @map("reviewed_at") @db.Timestamptz(6)
+  createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  lesson         Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  reviewedByUser User?  @relation(fields: [reviewedByUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("narration_scripts")
+}
+
+model LessonAudio {
+  id                   String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  lessonId             String   @map("lesson_id") @db.Uuid
+  voiceProviderName    String   @map("voice_provider_name")
+  voiceIdentifier      String   @map("voice_identifier")
+  mergedAudioFileUrl   String   @map("merged_audio_file_url")
+  totalDurationSeconds Int?     @map("total_duration_seconds")
+  totalCharacterCount  Int?     @map("total_character_count")
+  sourceScriptChecksum String   @map("source_script_checksum")
+  audioStatus          String   @default("pending") @map("audio_status")
+  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  lesson   Lesson         @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  segments AudioSegment[]
+
+  @@unique([lessonId, voiceIdentifier])
+  @@map("lesson_audios")
+}
+
+// Per-block timing, used for playback highlight sync.
+model AudioSegment {
+  id                  String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  lessonAudioId       String  @map("lesson_audio_id") @db.Uuid
+  blockReferenceId    String  @map("block_reference_id")
+  segmentOrder        Int     @map("segment_order")
+  startMillisecond    Int     @map("start_millisecond")
+  endMillisecond      Int     @map("end_millisecond")
+  segmentAudioFileUrl String? @map("segment_audio_file_url")
+
+  lessonAudio LessonAudio @relation(fields: [lessonAudioId], references: [id], onDelete: Cascade)
+
+  @@unique([lessonAudioId, segmentOrder])
+  @@map("audio_segments")
+}
+
+// Table-of-contents snapshot taken at publish time. Excludes lesson bodies.
+model PublishedCourseStructure {
+  courseId               String   @id @map("course_id") @db.Uuid
+  structurePayload       Json     @map("structure_payload")
+  totalLessonCount       Int      @map("total_lesson_count")
+  publishedVersionNumber Int      @default(1) @map("published_version_number")
+  publishedByUserId      String   @map("published_by_user_id") @db.Uuid
+  publishedAt            DateTime @default(now()) @map("published_at") @db.Timestamptz(6)
+
+  course          Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  publishedByUser User   @relation(fields: [publishedByUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("published_course_structures")
+}
+
+// Sellable item: one course, or a whole category.
+model Product {
+  id                    String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  productType           String   @map("product_type")
+  courseId              String?  @map("course_id") @db.Uuid
+  categoryId            String?  @map("category_id") @db.Uuid
+  displayName           String   @map("display_name")
+  priceAmount           Decimal  @map("price_amount") @db.Decimal(12, 2)
+  currencyCode          String   @default("VND") @map("currency_code")
+  accessDurationDays    Int      @default(365) @map("access_duration_days")
+  gracePeriodDays       Int      @default(0) @map("grace_period_days")
+  renewalType           String   @default("manual") @map("renewal_type")
+  bundleInclusionPolicy String   @default("all_current_and_future") @map("bundle_inclusion_policy")
+  isActive              Boolean  @default(true) @map("is_active")
+  createdByUserId       String   @map("created_by_user_id") @db.Uuid
+  createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  course        Course?        @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  category      Category?      @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  createdByUser User           @relation(fields: [createdByUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  accessGrants  AccessGrant[]
+  paymentOrders PaymentOrder[]
+
+  // CHECK constraint and the two partial unique indexes are hand-written SQL.
+  @@map("products")
+}
+
+// Access right, scoped to one course or one whole category.
+model AccessGrant {
+  id                     String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId                 String    @map("user_id") @db.Uuid
+  scopeType              String    @map("scope_type")
+  scopeCourseId          String?   @map("scope_course_id") @db.Uuid
+  scopeCategoryId        String?   @map("scope_category_id") @db.Uuid
+  accessSource           String    @map("access_source")
+  sourceProductId        String?   @map("source_product_id") @db.Uuid
+  // §8 declares payment_order_id as a plain UUID with no REFERENCES clause.
+  // Kept without a relation so the emitted DDL matches the specification.
+  paymentOrderId         String?   @map("payment_order_id") @db.Uuid
+  grantedByUserId        String?   @map("granted_by_user_id") @db.Uuid
+  expiresAt              DateTime? @map("expires_at") @db.Timestamptz(6)
+  gracePeriodDays        Int       @default(0) @map("grace_period_days")
+  renewalCount           Int       @default(0) @map("renewal_count")
+  sentReminderMilestones Json      @default("[]") @map("sent_reminder_milestones")
+  revokedAt              DateTime? @map("revoked_at") @db.Timestamptz(6)
+  createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user          User      @relation("AccessGrantUser", fields: [userId], references: [id], onDelete: Cascade)
+  scopeCourse   Course?   @relation(fields: [scopeCourseId], references: [id], onDelete: Cascade)
+  scopeCategory Category? @relation(fields: [scopeCategoryId], references: [id], onDelete: Cascade)
+  sourceProduct Product?  @relation(fields: [sourceProductId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  grantedByUser User?     @relation("AccessGrantGrantedBy", fields: [grantedByUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  // CHECK constraint, two partial unique indexes and idx_access_grants_expiry
+  // are hand-written SQL.
+  @@map("access_grants")
+}
+
+model PaymentOrder {
+  id                     String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId                 String    @map("user_id") @db.Uuid
+  productId              String    @map("product_id") @db.Uuid
+  providerName           String    @map("provider_name")
+  providerOrderReference String    @map("provider_order_reference")
+  amount                 Decimal   @db.Decimal(12, 2)
+  currencyCode           String    @map("currency_code")
+  orderStatus            String    @default("pending") @map("order_status")
+  rawWebhookPayload      Json?     @map("raw_webhook_payload")
+  createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  completedAt            DateTime? @map("completed_at") @db.Timestamptz(6)
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  product Product @relation(fields: [productId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([providerName, providerOrderReference])
+  @@map("payment_orders")
+}
+
+model LessonProgress {
+  id                   String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId               String    @map("user_id") @db.Uuid
+  lessonId             String    @map("lesson_id") @db.Uuid
+  progressStatus       String    @default("not_started") @map("progress_status")
+  lastScrollPercentage Int       @default(0) @map("last_scroll_percentage") @db.SmallInt
+  lastAudioPositionMs  Int       @default(0) @map("last_audio_position_ms")
+  completedAt          DateTime? @map("completed_at") @db.Timestamptz(6)
+  updatedAt            DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, lessonId])
+  @@map("lesson_progress")
+}
+
+model TopicRequest {
+  id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  requestedByUserId   String   @map("requested_by_user_id") @db.Uuid
+  requestedTopicTitle String   @map("requested_topic_title")
+  requestDescription  String?  @map("request_description")
+  requestStatus       String   @default("pending") @map("request_status")
+  upvoteCount         Int      @default(0) @map("upvote_count")
+  reviewerNote        String?  @map("reviewer_note")
+  reviewedByUserId    String?  @map("reviewed_by_user_id") @db.Uuid
+  linkedCourseId      String?  @map("linked_course_id") @db.Uuid
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  requestedByUser User               @relation("TopicRequestRequestedBy", fields: [requestedByUserId], references: [id], onDelete: Cascade)
+  reviewedByUser  User?              @relation("TopicRequestReviewedBy", fields: [reviewedByUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  linkedCourse    Course?            @relation(fields: [linkedCourseId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  votes           TopicRequestVote[]
+
+  @@map("topic_requests")
+}
+
+model TopicRequestVote {
+  topicRequestId String   @map("topic_request_id") @db.Uuid
+  userId         String   @map("user_id") @db.Uuid
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  topicRequest TopicRequest @relation(fields: [topicRequestId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([topicRequestId, userId])
+  @@map("topic_request_votes")
+}
+
+model GenerationJob {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  jobType        String    @map("job_type")
+  targetEntityId String    @map("target_entity_id") @db.Uuid
+  jobStatus      String    @default("queued") @map("job_status")
+  attemptCount   Int       @default(0) @map("attempt_count")
+  errorMessage   String?   @map("error_message")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  startedAt      DateTime? @map("started_at") @db.Timestamptz(6)
+  finishedAt     DateTime? @map("finished_at") @db.Timestamptz(6)
+
+  @@index([targetEntityId, jobType], map: "idx_generation_jobs_target")
+  @@map("generation_jobs")
+}
+
+// ---------------------------------------------------------------------------
+// Auth.js (@auth/prisma-adapter) infrastructure.
+//
+// These three tables are NOT in spec §8. The approved P0 decision is database
+// sessions via the Prisma adapter (FR-AUTH-01 requires that disabling an admin
+// take effect immediately, which a JWT cannot do), and the adapter requires
+// them. Field names are fixed by the adapter; column and table names follow
+// project convention through @map.
+// ---------------------------------------------------------------------------
+
+model Account {
+  id                String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId            String  @map("user_id") @db.Uuid
+  type              String
+  provider          String
+  providerAccountId String  @map("provider_account_id")
+  refresh_token     String? @map("refresh_token")
+  access_token      String? @map("access_token")
+  expires_at        Int?    @map("expires_at")
+  token_type        String? @map("token_type")
+  scope             String?
+  id_token          String? @map("id_token")
+  session_state     String? @map("session_state")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sessionToken String   @unique @map("session_token")
+  userId       String   @map("user_id") @db.Uuid
+  expires      DateTime @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId], map: "idx_sessions_user")
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime @db.Timestamptz(6)
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}

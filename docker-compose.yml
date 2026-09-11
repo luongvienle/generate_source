@@ -1,0 +1,33 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: knowledge-explorer-postgres
+    environment:
+      POSTGRES_USER: knowledge_explorer
+      POSTGRES_PASSWORD: knowledge_explorer
+      POSTGRES_DB: knowledge_explorer
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U knowledge_explorer -d knowledge_explorer"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  redis:
+    image: redis:7
+    container_name: knowledge-explorer-redis
+    ports:
+      # Host 6380: a native redis-server already holds 6379 on this machine.
+      # Container-internal port is unchanged, so CI (no conflict) can map 6379 directly.
+      - "6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+volumes:
+  postgres-data:
