@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: knowledge_explorer
+          POSTGRES_PASSWORD: knowledge_explorer
+          POSTGRES_DB: knowledge_explorer
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U knowledge_explorer -d knowledge_explorer"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+
+      redis:
+        # No port conflict on a CI runner, so the container maps to 6379 here
+        # even though local development maps it to 6380.
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+
+    env:
+      DATABASE_URL: postgresql://knowledge_explorer:knowledge_explorer@localhost:5432/knowledge_explorer
+      REDIS_URL: redis://localhost:6379
+      AUTH_URL: http://localhost:3000
+      # Test-only value. Real secrets never live in this file.
+      AUTH_SECRET: ci-only-secret-not-used-for-any-real-session
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm db:migrate
+
+      # `lint` currently matches no package script and is a no-op; it stays in
+      # the sequence so that choosing a linter needs no CI change.
+      - run: pnpm exec turbo run typecheck lint test

@@ -64,13 +64,13 @@ state, so update it as you go rather than at the end.
     asserts every §8 column of `users` is present with its original name and
     type, and the three adapter tables exist.
 
-- [ ] **Task 8: API bootstrap with database connectivity**
+- [x] **Task 8: API bootstrap with database connectivity**
   `apps/api` Nest bootstrap, the `PrismaClient` singleton in
   `packages/database/src/client.ts`, and `GET /health`.
   - done when: with Compose up, `curl -s localhost:<port>/health` returns `200`
     and a body confirming a successful database round trip.
 
-- [ ] **Task 9: EmailProvider interface and its log implementation**
+- [x] **Task 9: EmailProvider interface and its log implementation**
   `sendSignInLink(emailAddress, url)`, with the only P0 implementation writing
   to the application log.
   - done when: a unit test asserts the logged line contains the URL, and that
@@ -83,7 +83,7 @@ state, so update it as you go rather than at the end.
     log; visiting it creates a row in `Session`; visiting the same link a
     second time is rejected.
 
-- [ ] **Task 11: SessionContext and session.guard**
+- [x] **Task 11: SessionContext and session.guard**
   Resolve `{ userId, userRole, isActive }` from the session row and
   `users.user_role` on every request. Nothing downstream may read identity from
   the request.
@@ -92,7 +92,7 @@ state, so update it as you go rather than at the end.
     produces an identical response to one without it; and disabling a user
     causes their next call to fail with no process restart.
 
-- [ ] **Task 12: roles.guard, deny-by-default, and the admin endpoints**
+- [x] **Task 12: roles.guard, deny-by-default, and the admin endpoints**
   `@Roles` decorator, `roles.guard` rejecting every caller when no role is
   declared, `errorCode` on all rejections, and `POST /admins` +
   `PATCH /admins/:userId`.
@@ -100,19 +100,19 @@ state, so update it as you go rather than at the end.
     admin → `403` + `errorCode`; learner → `403`; unauthenticated → `401`; and
     a temporary endpoint with no `@Roles` rejects all three roles.
 
-- [ ] **Task 13: published-lock.guard (R-01) and assignment.guard (R-02)**
+- [x] **Task 13: published-lock.guard (R-01) and assignment.guard (R-02)**
   Apply both to the chapter and lesson write routes.
   - done when: the R-01 and R-02 rows of the spec's verification table pass —
     admin writing to a `published` course → `403`; owner → `200`; admin writing
     a chapter assigned to another admin → `403`; unassigned → `200`.
 
-- [ ] **Task 14: The full policy suite and the eleven-row HTTP matrix**
+- [x] **Task 14: The full policy suite and the eleven-row HTTP matrix**
   `policy.spec.ts` iterating all 48 matrix cells, and `rbac.e2e-spec.ts`
   covering every row of the spec's verification table against a live app.
   - done when: `pnpm test` runs 48 policy assertions and all eleven integration
     rows green, and adding a matrix row without a policy branch fails the suite.
 
-- [ ] **Task 15: Guard-binding mutation check**
+- [x] **Task 15: Guard-binding mutation check**
   Temporarily stub `published-lock.guard` to return `true`; separately strip
   `@Roles` from `POST /admins`. Confirm the suite goes red each time, then
   revert both.
@@ -120,14 +120,14 @@ state, so update it as you go rather than at the end.
     R-01 row and the `POST /admins` row respectively, the result is recorded in
     the PR description, and `git status` is clean afterwards.
 
-- [ ] **Task 16: Remaining shells and empty packages**
+- [x] **Task 16: Remaining shells and empty packages**
   `apps/learner-web` serving one page, `apps/worker` connecting to Redis with
   no queues registered, and `packages/content`, `packages/ai`,
   `packages/commerce` each with a manifest, tsconfig and empty `src/index.ts`.
   - done when: both apps boot, the worker logs a successful Redis `PING`, and
     `turbo run build` is green across all nine workspaces.
 
-- [ ] **Task 17: CI workflow**
+- [x] **Task 17: CI workflow**
   `.github/workflows/ci.yml` on push and pull request: `pnpm install
   --frozen-lockfile`, migrate against a `postgres:16` service container, then
   `turbo run typecheck lint test`.
@@ -185,3 +185,55 @@ Recorded 2026-09-12, after tasks 1–7. Read these before continuing at task 8.
 - §8.1 catalogues no allowed values for `generation_jobs.job_status`, though the
   column exists with default `queued`. No enum was invented for it. Worth
   raising with the spec owner before P3, which is the first phase to write jobs.
+
+---
+
+## Progress notes, part two
+
+Recorded 2026-09-12, after tasks 8-9 and 11-17. **Task 10 is the only one left.**
+
+**Task 10 is blocked on a version decision, not on effort.** `next-auth` latest
+is 4.24.15; Auth.js v5 is still `5.0.0-beta.32`, and `@auth/prisma-adapter`
+(stable 2.11.3) pairs with v5. Choosing between a stable v4 and a beta v5 is a
+product decision, so nothing was installed. Everything else was built first
+because the API guard chain reads `sessions` rows directly and does not depend
+on which library writes them.
+
+**Consequences of task 10 being outstanding**
+- Verification row 2 ("reusing a sign-in link is rejected") is an `it.todo` in
+  `rbac.e2e-spec.ts`. Ten of the eleven rows pass; this one has no endpoint to
+  exercise yet and was left visibly undone rather than faked.
+- `InvitationService` mints tokens hashed as `sha256(token + AUTH_SECRET)`,
+  which is Auth.js's documented scheme. Whichever version is chosen must hash
+  the same way, or invitation links will not be consumable. The coupling is
+  flagged in a comment on the service.
+- `apps/admin-web` exists as a booting Next.js shell; task 10 adds only the
+  Auth.js route handler and the sign-in page.
+
+**Decisions taken while implementing**
+- **Explicit `@Inject(Token)` everywhere in Nest, never type-based DI.**
+  Type-based injection needs `emitDecoratorMetadata`, which esbuild (tsx,
+  vitest) does not emit. `emitDecoratorMetadata` is set to `false` deliberately;
+  do not "fix" it by turning it on and dropping the tokens.
+- **Endpoints declare a §3 *action*, not a role.** `@RequirePermission(action)`
+  plus `isAllowed()` keeps the matrix the only place a role decision exists.
+- **`UndeclaredPolicyFixtureController` is intentional.** It declares no
+  permission and must always return 403 `FORBIDDEN_NO_POLICY`. It is a
+  permanent regression fixture for deny-by-default. Do not give it a permission.
+- **R-02 is enforced row-level** against a chapter's or lesson's own
+  `assigned_admin_id`. §3 phrases it as "courses where they are assigned", but
+  §8 defines no course-level assignment column. Whether an unassigned lesson
+  should inherit its chapter's assignment is unspecified and was not inferred.
+  Worth confirming with the spec owner before P1.
+- **`vitest.config.mts` widens the test glob** to `*-spec.ts`. Vitest's default
+  only matches `*.spec.ts`, so `rbac.e2e-spec.ts` silently did not run at first
+  — and a file that never runs is indistinguishable from a passing one.
+- Next 16.3.5 / React 19.3.0, both stable. Worker uses `ioredis` with
+  `maxRetriesPerRequest: null`, which is what BullMQ will require in P3.
+
+**Task 15 mutation results (evidence the suite binds to the guards)**
+- Stubbing `PublishedLockGuard` to return `true`: row 8 fails, and only row 8.
+- Removing `@RequirePermission` from `POST /admins`: rows 1 and 3 fail. Note the
+  endpoint became unusable rather than open — deny-by-default fired, which is
+  the correct fail-closed behavior.
+- Both mutations reverted; no residue remains.
