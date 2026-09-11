@@ -1,21 +1,24 @@
 ---
 generated_at: 2026-09-12
-commit: cb94ff7
+commit: cae5a036bfd7b43ac478d05c5d1929130e3c5f30
 generator_version: 0.6.0
 project_name: create_source
 ---
 
 # Project Harness Index
 
-This repository is a **specification-only project**: it contains one document,
-`knowledge-explorer-spec.md` (1075 lines), and no source code, manifest,
-lockfile, or CI configuration [verified]. The document specifies "Knowledge
-Explorer", a course platform with admin-authored lessons, AI-generated
-illustrations, LLM narration scripts and TTS audio, plus time-limited paid
-access [verified]. Every stack, tooling and workflow fact below is either
-`[declared]` by that spec as a *plan* or `Unknown` — nothing is installed or
-runnable yet [verified]. Treat the spec as the source of truth for intent, and
-this harness as a map of what exists versus what is merely intended.
+Knowledge Explorer is a course platform — admin-authored lessons with AI
+illustrations, LLM narration and TTS audio, sold as time-limited access. The
+repository is a **pnpm + Turborepo monorepo of nine workspaces** (four apps,
+five packages) on TypeScript and PostgreSQL [verified]. Phase P0 of the
+product spec is complete: the §8 database schema, Auth.js magic-link sign-in
+with database sessions, and the §3 permission matrix enforced by a
+deny-by-default guard chain in `apps/api` [verified]. Everything from P1
+onward — curriculum import, the lesson editor, images, narration, audio,
+publishing, the learner app and commerce — is unbuilt; the tables exist and no
+code reads them. Two documents govern the work and outrank anything inferred
+from code: `knowledge-explorer-spec.md` (the locked product spec) and
+`specs/p0-foundation/`.
 
 ## Contents
 
@@ -35,54 +38,62 @@ this harness as a map of what exists versus what is merely intended.
 
 ## Risks & Assumptions
 
+The three `[assumed]` items in the previous harness — implementation language,
+runtime and workspace tool — are now `[verified]` facts. What remains:
+
 **Assumptions**
 
-- **TypeScript is the implementation language** `[assumed]` — basis: spec §7.3
-  contains TypeScript function signatures (`function isGrantActive(grant:
-  AccessGrant, now: Date): boolean`) and §11 names Next.js, NestJS, Prisma and
-  BullMQ, all TypeScript-first. No `tsconfig.json`, manifest or `.ts` file
-  exists to confirm it [verified].
-- **The `/apps` + `/packages` layout in spec §11 implies a workspace-based
-  monorepo tool** (npm/pnpm/yarn workspaces, Nx or Turborepo) `[assumed]` —
-  basis: ecosystem convention for that layout. The spec names no tool and no
-  manifest exists [verified].
-- **Node.js is the runtime** `[assumed]` — basis: Next.js, NestJS and BullMQ
-  are Node-only. No `engines` field or version file exists [verified].
+- **The four apps are intended as separately deployed services** `[assumed]` —
+  basis: each has its own manifest and build output, and §11 lists them as four
+  applications. No deployment configuration exists anywhere in the repository
+  to confirm it, and deployment is an explicit P0 non-goal.
+- **`packages/ai`, `packages/commerce` and `packages/content` are placeholders
+  for the responsibilities §11 assigns them** `[assumed]` — basis: their names
+  match §11's descriptions exactly, and each contains a 0-byte `src/index.ts`
+  [verified]. Nothing in code states their intended contents.
+- **PostgreSQL 16 and Redis 7 are the production targets** `[assumed]` — basis:
+  `docker-compose.yml` and `.github/workflows/ci.yml` both pin those majors
+  [verified]. No production environment configuration exists.
+- **Test files are placed in a per-workspace `test/` directory** `[assumed]` —
+  basis: all nine test files follow it [verified], but no lint rule or config
+  enforces it.
 
-**Unknown — infrastructure and tooling**
+**Unknown — tooling**
 
-- Runtime and its version — no manifest, no `.nvmrc`, no `engines` field.
-- Package manager — no lockfile of any kind detected.
-- Build system and build outputs — no manifest, no Makefile, no build config.
-- Monorepo tool — no `pnpm-workspace.yaml`, `nx.json`, `turbo.json`, or
-  workspaces field.
-- Linters, formatters, static analysis, security scanners — no tool config
-  files detected.
-- Test frameworks — none configured, though spec §7.4 and §7.3 (E-01) mandate
-  specific regression and unit tests `[declared]`.
-- CI provider and pipeline — no `.github/`, `.gitlab-ci.yml`, or equivalent.
-- Development, build, test and verification workflows, and every recommended
-  command — nothing declared in project config; spec §12 phase P0 lists "CI"
-  only as a deliverable `[declared]`.
-- Application entry points — no source files exist.
+- Linters. No configuration exists, and `turbo run lint` matched no package
+  script and emitted "No tasks were executed" [verified]. The task is wired
+  into CI so adopting a linter needs no workflow change.
+- Formatters. No Prettier, Biome or `.editorconfig` [verified via detect.sh
+  `tool_configs` being empty].
+- Static analysis beyond the TypeScript compiler. `strict` is on, with
+  `noUncheckedIndexedAccess`, `noImplicitOverride` and
+  `noFallthroughCasesInSwitch` [verified] — nothing further is configured.
+- Security scanners. No scanner config, no dependency-audit step in CI
+  [verified].
 
-**Unknown — repository and process**
+**Unknown — process and environment**
 
-- Commit conventions — the repository was initialized on 2026-09-12 and has a
-  single commit [verified], which is not enough history to derive a style from.
-- The companion document `knowledge-explorer-design.md` (Vietnamese),
-  referenced in the spec header, is **not present in this repository**
-  [verified]. Its rationale content is therefore unavailable to consumers of
-  this harness.
+- Whether CI passes. `.github/workflows/ci.yml` exists and the same four
+  commands pass locally [verified], but the repository has no git remote, so
+  the job has never run.
+- Production deployment, hosting, object storage and CDN — P0 non-goals; no
+  configuration exists.
+- The transactional email provider. Delivery is dev-mode logging in both
+  `apps/api` and `apps/admin-web` [verified]; §7.5's provider choice is open
+  and owned by P8.
 
-**Unknown — product decisions the spec leaves open (§14)**
+**Unknown — specification gaps that will block later phases**
 
-- Payment gateway — the spec states this is the only open item blocking phase
-  P8 `[declared]`.
-- Grace period length (`gracePeriodDays` defaults to 0) `[declared]`.
-- Number of free-preview lessons per course `[declared]`.
-- Whether the chosen TTS provider supports SSML marks with returned
-  timepoints, which would remove the ffmpeg dependency `[declared]`.
+- `generation_jobs.job_status` has no allowed values. The column exists with
+  default `queued` [verified], but §8.1 catalogues no member list for it, so
+  unlike every other enum-like column it has no zod schema. Needs resolving
+  before P3, the first phase to write jobs.
+- R-02's scope. §3 phrases it as "courses where they are assigned", but §8
+  defines `assigned_admin_id` only on `chapters` and `lessons` and no
+  course-level column exists [verified]. Enforcement is row-level by an
+  explicit decision recorded in `assignment.guard.ts`; whether an unassigned
+  lesson should inherit its chapter's assignment is undecided.
+- The payment gateway — §14 names it as the only open decision blocking P8.
 
 ## Notes
 

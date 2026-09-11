@@ -1,60 +1,89 @@
 # Workflows
 
-No manifest, Makefile, task runner or CI configuration exists in this repository
-[verified], so **no workflow command can be derived from project config**. The
-spec describes development *phases*, not commands.
+Every command below was executed successfully in this session unless marked
+`[declared]`.
 
 ## Development Workflow
 
-`Unknown`. There is nothing to install, run or serve — the repository contains
-only a specification document [verified].
+1. `nvm use` — the shell must be on Node 22; `.nvmrc` pins it [verified].
+2. `cp .env.example .env` and set `AUTH_SECRET` (`openssl rand -base64 32`)
+   [verified]. `.env` is gitignored; `.env.example` is tracked.
+3. `docker compose up -d --wait` — Postgres 16 and Redis 7, both with
+   healthchecks; the flag blocks until healthy [verified].
+4. `pnpm install` [verified].
+5. `pnpm db:migrate` [verified].
+6. Per app: `pnpm --filter @knowledge-explorer/api dev` (tsx watch),
+   `... admin-web dev` / `... learner-web dev` (next dev) `[declared]` — the
+   underlying `tsx src/main.ts` and `next start` were both run directly and
+   worked [verified].
 
-The declared first step is spec §12 phase **P0 — Foundation**: "Monorepo, Docker
-Compose, Prisma, Auth.js, three-role RBAC, CI", estimated at 1 week `[declared]`.
-Until P0 lands, the development workflow is authoring and revising
-`knowledge-explorer-spec.md`.
+**Redis is on host port 6380, not 6379** — a native `redis-server` occupies
+6379 on the development machine. The container's internal port is unchanged and
+CI maps 6379 [verified].
 
 ## Build Workflow
 
-`Unknown`. No build tool, build script or build output is defined [verified].
+`pnpm build` → `turbo run build`: **5 tasks green** [verified] — `next build`
+for both web apps, `tsc --outDir dist` for `api` and `worker`, plus the
+`db:generate` dependency. The five packages have no build step by design; they
+are consumed as TypeScript source, which is why both Next apps set
+`transpilePackages` [verified].
 
 ## Test Workflow
 
-`Unknown`. No test framework is configured and no test file exists [verified].
-See `tools.md` for the tests the spec mandates without naming a runner.
+`pnpm test` → `turbo run test`: **128 tests across 4 workspaces, all passing**
+[verified]. Requires Docker running and the migration applied — the database
+and API suites talk to a real Postgres.
+
+Single workspace: `pnpm --filter @knowledge-explorer/<name> test` [verified].
 
 ## Verification Workflow
 
-`Unknown`. No CI configuration exists [verified]; CI is listed only as a phase
-P0 deliverable `[declared]` (§12), with no provider, pipeline or check sequence
-specified.
+The sequence from `specs/p0-foundation/spec.md`, run end to end this session
+[verified]:
 
-Spec-level verification gates that any future pipeline should encode
-`[declared]`:
+```
+docker compose up -d --wait
+pnpm install --frozen-lockfile
+pnpm db:migrate
+pnpm exec turbo run typecheck lint test
+```
 
-- The **publish checklist** (§5.7, FR-PUB-01) must pass before a course can be
-  published: every non-deleted lesson has content, no lesson is `empty`, every
-  figure has a selected image with caption and alt text, no script or audio is
-  `stale` or `failed`, at least 3 chapters with at least 2 lessons each, a
-  category and cover image are set, and a paid course has an active product.
-- Narration output validation (§6.3): reject and retry when segment count,
-  `blockId` set, or ordering differs from the input block list.
+Result: 13 turbo tasks successful, 128 tests passing, and `--frozen-lockfile`
+confirms the lockfile is in sync [verified]. `lint` contributes nothing — it
+matches no package script [verified].
+
+`pnpm verify` (`typecheck && lint && test`) runs the same checks without the
+Docker and migrate steps [verified].
+
+CI runs the identical sequence against Postgres 16 and Redis 7 service
+containers [verified in `.github/workflows/ci.yml`]. **The workflow has never
+executed**: the repository has no git remote.
 
 ## Recommended Commands
 
 | Task | Command | Tag |
 |---|---|---|
-| Install dependencies | `Unknown` — no manifest or lockfile | — |
-| Run development server | `Unknown` — no application code | — |
-| Build | `Unknown` — no build system | — |
-| Lint | `Unknown` — no linter configured | — |
-| Format | `Unknown` — no formatter configured | — |
-| Typecheck | `Unknown` — no TypeScript config | — |
-| Test | `Unknown` — no test framework configured | — |
-| CI verification | `Unknown` — no CI configuration | — |
+| Start infrastructure | `docker compose up -d --wait` | [verified] |
+| Install | `pnpm install --frozen-lockfile` | [verified] |
+| Apply migrations | `pnpm db:migrate` | [verified] |
+| Regenerate Prisma client | `pnpm db:generate` | [verified] |
+| Typecheck everything | `pnpm typecheck` | [verified] |
+| Build everything | `pnpm build` | [verified] |
+| Test everything | `pnpm test` | [verified] |
+| Full local check | `pnpm verify` | [verified] |
+| Magic-link end-to-end | `./scripts/verify-magic-link.sh` | [verified] |
+| Run the API | `pnpm --filter @knowledge-explorer/api dev` | [declared] |
+| Run a web app | `pnpm --filter @knowledge-explorer/admin-web dev` | [declared] |
+| Run the worker | `pnpm --filter @knowledge-explorer/worker start` | [declared] |
 
-Nothing in this repository is executable, so no command could be promoted from
-`[declared]` to `[verified]` by running it.
+**Do not run `prisma migrate dev` against an edited schema without reading
+`conventions.md` first** — it regenerates the initial migration and silently
+discards hand-written SQL.
+
+A stale `next start` survives `pkill -f "next start"` as a `next-server` child;
+kill it by port (`lsof -ti:3000 | xargs kill`) or it serves an old build
+[verified].
 
 ## Notes
 

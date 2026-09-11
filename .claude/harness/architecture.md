@@ -2,93 +2,91 @@
 
 ## Pattern
 
-**No architecture is implemented.** No pattern can be identified from code
-because the repository contains no source files [verified] (`source_files=0`).
+**A workspace monorepo with a shared kernel, plus a partially realised
+ports-and-adapters boundary.** Stated precisely, because two of the three
+elements are only partly built:
 
-The specification declares an intended architecture, spec §11 `[declared]`:
-a **service-oriented monorepo** — four deployable applications (`admin-web`,
-`learner-web`, `api`, `worker`) over five shared packages — combined with a
-**ports-and-adapters (hexagonal) boundary for every external dependency**. The
-spec lists five provider interfaces that all external services sit behind:
-`LlmProvider`, `ImageGenerationProvider`, `TextToSpeechProvider`,
-`PaymentProvider` and `EmailProvider` (§11). Domain logic (entitlement
-resolution, block extraction, checksums) is declared to live in framework-free
-packages — `/packages/commerce`, `/packages/content` — separate from the NestJS
-and Next.js applications that consume them.
+- **Monorepo with a shared kernel** — fully realised [verified]. Four
+  deployable apps consume five packages. `packages/shared` is the kernel:
+  it holds the §8.1 enum members, the §3 permission matrix and the error
+  codes, and both `apps/api` and the test suites read it rather than
+  restating those values. Dependency direction is strictly one-way: no
+  package depends on any app [verified].
 
-Treat all of the above as a plan to be verified against code once code exists,
-not as an observed structure.
+- **Layered, inside `apps/api`** — realised [verified]. NestJS convention
+  gives controllers (`admins/`, `content/`, `health/`), a cross-cutting guard
+  chain (`auth/`), and injectable services (`prisma/`, `auth/invitation.service.ts`).
+  Guards run in a fixed order and each layer narrows the previous one.
+
+- **Ports and adapters** — declared but barely built `[assumed]` as the
+  intent. §11 names five provider interfaces; exactly one exists —
+  `EmailProvider` in `apps/api/src/email/`, with `LogEmailProvider` as its only
+  implementation, bound through a Symbol token [verified]. The other four have
+  no interface and their packages are empty. Do not describe this codebase as
+  hexagonal yet.
+
+**Not** microservices: the apps share one database and one Prisma schema
+[verified]. **Not** feature-based: `apps/api/src` is organised by technical
+role, not by feature.
 
 ## Important Directories
 
 | Path | Purpose | Evidence |
 |---|---|---|
-| `/` | Repository root; holds the sole content file `knowledge-explorer-spec.md` | [verified] directory listing |
-| `/knowledge-explorer-spec.md` | Product Specification v1 — the entire project content: requirements, data model, API contracts, phases | [verified] file read in full |
-| `/.claude/` | Claude Code project configuration | [verified] directory listing |
-| `/.claude/settings.local.json` | Enables the `project-skills@project-skills` plugin | [verified] file contents |
-| `/.claude/harness/` | This generated harness | [verified] created by this run |
+| `knowledge-explorer-spec.md` | Locked product spec; source of truth for §-references throughout the code | [verified] |
+| `specs/p0-foundation/` | spec.md, plan.md, tasks.md — tasks.md is durable progress state and carries three sets of implementation notes | [verified] |
+| `packages/shared/src/` | `enums.ts` (§8.1), `roles.ts` (§3 matrix + `isAllowed`), `errors.ts` | [verified] |
+| `packages/database/prisma/` | `schema.prisma` (18 §8 tables + 3 Auth.js tables), one migration | [verified] |
+| `packages/database/prisma/migrations/20260911180121_init/` | **Contains hand-written SQL that must never be regenerated** — see Risks | [verified] |
+| `apps/api/src/auth/` | The guard chain: session, roles, R-01, R-02, plus target resolution and invitations | [verified] |
+| `apps/api/test/rbac.e2e-spec.ts` | The eleven-row verification matrix over real HTTP | [verified] |
+| `apps/admin-web/auth.ts` | Auth.js configuration: Prisma adapter, database sessions, dev-mode link delivery | [verified] |
+| `scripts/verify-magic-link.sh` | End-to-end magic-link check needing a live server; not part of `pnpm test` | [verified] |
+| `packages/{ai,commerce,content}/` | Empty placeholders — nothing to read | [verified] |
 
-No source root, test root, scripts directory, docs directory, or
-generated/vendored code exists [verified]. No submodules or nested repositories
-[verified].
+No submodules; no vendored or generated code is committed (`dist/`, `.next/`,
+`node_modules/` are all ignored) [verified].
 
 ## Module & Data Flow
 
-Entry points: `Unknown` — no code exists [verified].
-
-The spec declares the following content and access pipelines `[declared]`.
-Section references point into `knowledge-explorer-spec.md`.
-
-**Authoring pipeline (§1.2, §4, §6)**
-
-1. Admin owner writes the curriculum outline **outside the app** and imports it
-   as JSON (§5.2, §9.1). Import is idempotent on `(categorySlug, levelLabel)`
-   and creates a skeleton only — every lesson starts at `contentStatus = empty`.
-2. Admins hand-write lesson bodies in markdown; **no LLM writes subject-matter
-   content** (§1.2). Saving parses markdown into an ordered block list via a
-   remark AST, assigning stable `blockId`s and figure/table numbers in one place
-   (§6.1, FR-EDIT-02).
-3. Images: AI-generated candidates (2–4) or manual upload; exactly one candidate
-   per figure block is selected, with mandatory caption and alt text (§6.2, §5.4).
-4. Narration script: an LLM receives **the block list, not raw markdown**, and
-   must return exactly one segment per block, same order, same `blockId`s;
-   violations are rejected and retried up to twice (§6.3, FR-SCRIPT-01).
-5. Audio: TTS synthesizes **one file per segment**, durations are measured,
-   files are merged with ffmpeg, and per-block offsets are stored for playback
-   highlight sync (§6.4, FR-AUDIO-01/02).
-
-**Staleness chain (§6.5)** — computed on read, never written by a job:
+**Request path through `apps/api`** [verified by reading the guards and by the
+passing e2e matrix]:
 
 ```
-lesson_contents.draft_content_checksum
-        └─→ narration_scripts.source_content_checksum
-                    └─→ lesson_audios.source_script_checksum
+HTTP request
+  → SessionGuard        clears any caller-supplied identity, reads the session
+                        cookie, loads sessions + users from the database,
+                        rejects expired sessions and disabled accounts
+  → RolesGuard          reads the endpoint's declared §3 action; no declaration
+                        means refuse everyone; consults isAllowed(action, role)
+  → PublishedLockGuard  R-01: non-owner writing to a published course → 403
+  → AssignmentGuard     R-02: admin writing a row assigned to someone else → 403
+  → controller
 ```
 
-**Draft / published split (§4.3)** — admins read and write the normalized tables
-(`chapters`, `lessons`, `lesson_contents.draft_content_markdown`); learners read
-only the published track (`published_course_structures` plus
-`lesson_contents.published_content_markdown`). Publishing copies draft to
-published and rebuilds the table-of-contents snapshot. `lessonId` never changes,
-so `lesson_progress` survives every publish. Deletes are soft (`deleted_at`).
+Identity is resolved from the database on **every** request, never from client
+input — the guard explicitly discards anything already on the request object
+before querying (FR-AUTH-02) [verified]. Endpoints declare a §3 *action* rather
+than a role, so `packages/shared/src/roles.ts` remains the only place a role
+decision is recorded [verified].
 
-**Request-layer boundaries (§3, §7.3, §9)**
+**Authentication** lives in `apps/admin-web`, not the API. Auth.js mints
+`sessions` rows through the Prisma adapter; the API only reads them. Database
+sessions rather than JWT because FR-AUTH-01 requires that disabling an admin
+block the next call immediately [verified — asserted in the e2e suite].
+Invitation links minted by `apps/api/src/auth/invitation.service.ts` hash as
+`sha256(token + AUTH_SECRET)`, which matches Auth.js's scheme — confirmed by
+comparing a real Auth.js-issued token, and re-asserted by
+`scripts/verify-magic-link.sh` [verified].
 
-- Rule R-01: every write under `/api/admin/*` returns `403` when the target
-  course is `published` and the caller is not `admin_owner` — enforced
-  server-side, not by hiding UI.
-- Requirement E-01: `hasAccessToLesson` must gate **both** `GET /lessons/:lessonId`
-  and `GET /media/:mediaId/signed-url`; missing either leaks paid audio.
-- Requirement E-02: expiry is never materialized into a status column; it is
-  always computed from `expiresAt` plus `gracePeriodDays`.
-- The public API contains **no endpoint that calls an LLM, image generator or
-  TTS provider** (§9.4), deliberately removing any path for anonymous traffic to
-  spend money.
-- Every AI and TTS call runs as a background job with bounded concurrency and at
-  most 3 attempts; no HTTP request waits on an AI provider, and progress is
-  reported over server-sent events (NFR-03, NFR-04, §9.3
-  `GET /courses/:courseId/stream`).
+**Entry points** [verified]: `apps/api/src/main.ts` (HTTP, global prefix `api`
+with `health` excluded, port from `API_PORT`, default 3001);
+`apps/worker/src/main.ts` (standalone context, Redis PING, exits);
+`apps/admin-web/app/` and `apps/learner-web/app/` (Next App Router).
+
+**Unbuilt flows.** The §6 content pipeline (block extraction → images →
+narration → audio), the §6.5 checksum chain, the §4.3 draft/published split and
+all of §7's commerce exist only as tables. No code reads or writes them.
 
 ## Notes
 
