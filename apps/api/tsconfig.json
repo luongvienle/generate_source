@@ -1,4 +1,9 @@
 {
   "extends": "@knowledge-explorer/shared/tsconfig.base.json",
+  "compilerOptions": {
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": false,
+    "strictPropertyInitialization": false
+  },
   "include": ["src", "test"]
 }
