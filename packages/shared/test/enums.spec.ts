@@ -95,3 +95,35 @@ describe('zod schemas', () => {
     }
   });
 });
+
+/**
+ * §6.1's block vocabulary. Not a §8 column — it is a field inside the
+ * draft_block_list JSONB — so it is deliberately absent from enumColumns, and
+ * this suite pins it separately.
+ */
+describe('block types (§6.1)', () => {
+  it('has exactly the seven members the lesson dialect supports', () => {
+    expect([...shared.blockTypes]).toEqual([
+      'heading',
+      'paragraph',
+      'list',
+      'code',
+      'figure',
+      'table',
+      'blockquote',
+    ]);
+  });
+
+  it('is NOT catalogued as a database column', () => {
+    expect(Object.keys(enumColumns)).not.toContain('block_type');
+  });
+
+  it('every member is something §6.3 could narrate', () => {
+    // One narration segment per block, so a member nobody can voice would be a
+    // contradiction rather than a nuisance.
+    for (const blockType of shared.blockTypes) {
+      expect(shared.blockTypeSchema.safeParse(blockType).success).toBe(true);
+    }
+    expect(shared.blockTypeSchema.safeParse('thematicBreak').success).toBe(false);
+  });
+});

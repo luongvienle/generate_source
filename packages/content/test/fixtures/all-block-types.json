@@ -1,0 +1,80 @@
+{
+  "ok": true,
+  "blockList": {
+    "blocks": [
+      {
+        "blockId": "b1",
+        "blockType": "heading",
+        "markdown": "# Hiragana",
+        "text": "Hiragana",
+        "depth": 1
+      },
+      {
+        "blockId": "b2",
+        "blockType": "paragraph",
+        "markdown": "Hiragana is a **syllabary**.",
+        "text": "Hiragana is a syllabary."
+      },
+      {
+        "blockId": "b3",
+        "blockType": "list",
+        "markdown": "- あ\n- い\n- う",
+        "text": "あ\nい\nう",
+        "ordered": false
+      },
+      {
+        "blockId": "b4",
+        "blockType": "list",
+        "markdown": "1. Trace the stroke\n2. Repeat",
+        "text": "Trace the stroke\nRepeat",
+        "ordered": true
+      },
+      {
+        "blockId": "b5",
+        "blockType": "code",
+        "markdown": "```ts\nconst kana = 'あ';\n```",
+        "text": "const kana = 'あ';",
+        "lang": "ts"
+      },
+      {
+        "blockId": "b6",
+        "blockType": "blockquote",
+        "markdown": "> Practice beats theory.",
+        "text": "Practice beats theory."
+      },
+      {
+        "blockId": "fig7",
+        "blockType": "figure",
+        "markdown": "::figure",
+        "text": "",
+        "figureNumber": 1
+      },
+      {
+        "blockId": "tbl8",
+        "blockType": "table",
+        "markdown": "| Character | Romaji | Sound |\n|---|---|---|\n| あ | a | ah |\n| い | i | ee |",
+        "text": "Pronunciation of the A-row",
+        "captionText": "Pronunciation of the A-row",
+        "headers": [
+          "Character",
+          "Romaji",
+          "Sound"
+        ],
+        "rows": [
+          [
+            "あ",
+            "a",
+            "ah"
+          ],
+          [
+            "い",
+            "i",
+            "ee"
+          ]
+        ],
+        "tableNumber": 1
+      }
+    ],
+    "nextBlockSeq": 9
+  }
+}

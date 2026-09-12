@@ -1,0 +1,30 @@
+{
+  "ok": false,
+  "errors": [
+    {
+      "message": "Raw HTML is not allowed in a lesson body. Use markdown, or remove the tag.",
+      "line": 3,
+      "column": 11
+    },
+    {
+      "message": "Raw HTML is not allowed in a lesson body. Use markdown, or remove the tag.",
+      "line": 3,
+      "column": 18
+    },
+    {
+      "message": "Unsupported construct: a horizontal rule cannot appear in a lesson body.",
+      "line": 5,
+      "column": 1
+    },
+    {
+      "message": "Unsupported construct: a link reference definition cannot appear in a lesson body.",
+      "line": 7,
+      "column": 1
+    },
+    {
+      "message": "Unsupported construct: a footnote definition cannot appear in a lesson body.",
+      "line": 9,
+      "column": 1
+    }
+  ]
+}

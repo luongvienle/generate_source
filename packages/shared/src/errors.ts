@@ -25,6 +25,10 @@ export const errorCodes = {
   STRUCTURE_MISMATCH: 'STRUCTURE_MISMATCH',
   /** No job with this id is known to Redis or generation_jobs. */
   JOB_NOT_FOUND: 'JOB_NOT_FOUND',
+  /** FR-EDIT-01: the lesson markdown failed §5.3 validation; every error carries a position. */
+  LESSON_CONTENT_INVALID: 'LESSON_CONTENT_INVALID',
+  /** The draft moved on since the editor loaded it; another admin saved first. */
+  LESSON_CONTENT_CONFLICT: 'LESSON_CONTENT_CONFLICT',
 } as const;
 
 export type ErrorCode = (typeof errorCodes)[keyof typeof errorCodes];

@@ -102,11 +102,34 @@ export const jobStatusSchema = z.enum(jobStatuses);
 export type JobStatus = (typeof jobStatuses)[number];
 
 /**
+ * The §6.1 block-list vocabulary: one member per top-level markdown construct
+ * the lesson dialect supports (§5.3, plus block quotes).
+ *
+ * Deliberately absent from `enumColumns` below: this is a field inside the
+ * `draft_block_list` JSONB, not an enum-like TEXT column, so §8.1 catalogues no
+ * row for it. Decided by specs/p2-authoring/spec.md.
+ *
+ * §6.3 requires exactly one narration segment per block, so every member here
+ * must be something a narrator can voice.
+ */
+export const blockTypes = [
+  'heading',
+  'paragraph',
+  'list',
+  'code',
+  'figure',
+  'table',
+  'blockquote',
+] as const;
+export const blockTypeSchema = z.enum(blockTypes);
+export type BlockType = (typeof blockTypes)[number];
+
+/**
  * Every enum-like column, keyed by its database column name, so tests and
  * tooling can assert coverage without restating the members.
  *
  * All but the last are catalogued by §8.1; `job_status` is not — see its
- * declaration above.
+ * declaration above. `blockTypes` is not a column at all and is not listed.
  */
 export const enumColumns = {
   user_role: userRoles,

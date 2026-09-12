@@ -1,0 +1,46 @@
+{
+  "ok": true,
+  "blockList": {
+    "blocks": [
+      {
+        "blockId": "fig1",
+        "blockType": "figure",
+        "markdown": "::figure",
+        "text": "",
+        "figureNumber": 1
+      },
+      {
+        "blockId": "b2",
+        "blockType": "paragraph",
+        "markdown": "Some prose between them.",
+        "text": "Some prose between them."
+      },
+      {
+        "blockId": "fig3",
+        "blockType": "figure",
+        "markdown": "::figure",
+        "text": "",
+        "figureNumber": 2
+      },
+      {
+        "blockId": "tbl4",
+        "blockType": "table",
+        "markdown": "| Character | Strokes |\n|---|---|\n| あ | 3 |",
+        "text": "Stroke counts",
+        "captionText": "Stroke counts",
+        "headers": [
+          "Character",
+          "Strokes"
+        ],
+        "rows": [
+          [
+            "あ",
+            "3"
+          ]
+        ],
+        "tableNumber": 1
+      }
+    ],
+    "nextBlockSeq": 5
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "ok": false,
+  "errors": [
+    {
+      "message": "Unsupported construct: a horizontal rule cannot appear in a lesson body.",
+      "line": 3,
+      "column": 1
+    }
+  ]
+}

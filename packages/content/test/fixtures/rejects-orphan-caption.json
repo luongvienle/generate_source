@@ -1,0 +1,10 @@
+{
+  "ok": false,
+  "errors": [
+    {
+      "message": "`::caption` must be followed immediately by a table.",
+      "line": 1,
+      "column": 1
+    }
+  ]
+}
