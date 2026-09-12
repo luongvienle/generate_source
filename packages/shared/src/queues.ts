@@ -91,3 +91,62 @@ export interface GenerateImageJobData {
   readonly candidateCount: number;
   readonly createdByUserId: string;
 }
+
+/**
+ * The narration script queue (P4): the THIRD producer on the substrate P1 built.
+ *
+ * The note on IMAGE_QUEUE_NAME above predicted the shared shape would be obvious
+ * at the third queue and named P5's audio queue as that third. Narration arrived
+ * first. The extraction was reconsidered here and DEFERRED AGAIN, deliberately:
+ * the three producers differ in more than their names — import carries two job
+ * names and a Redis-cached result, image retains nothing and qualifies its ids,
+ * narration holds a database-level in-flight lock — and a factory over three
+ * shapes that disagree would be parameterised until it was longer than the three
+ * siblings it replaced. P5's audio queue is the fourth and the closest sibling of
+ * image; that is the moment to extract, not this one.
+ *
+ * What genuinely must not drift — attempts, backoff, queue names, payload types —
+ * already lives in this file, which is what the pattern is actually protecting.
+ */
+export const NARRATION_QUEUE_NAME = 'narration-script';
+
+export const narrationJobNames = {
+  generate: 'generate',
+} as const;
+
+export type NarrationJobName = (typeof narrationJobNames)[keyof typeof narrationJobNames];
+
+/**
+ * What a generate_narration_script job carries.
+ *
+ * Deliberately THIN. Unlike GenerateImageJobData, no prompt and no input travel
+ * with the job: §6.3's input is the stored block list, which the worker re-reads
+ * and re-checksums at the start of the run. A block list is unbounded where a
+ * prompt string is small, and Redis is the wrong place for it. The consequence is
+ * recorded in specs/p4-narration/spec.md — an edit landing mid-run yields a
+ * script that is born stale, which is correct and which the tab shows.
+ */
+export interface GenerateNarrationScriptJobData {
+  readonly generationJobId: string;
+  readonly lessonId: string;
+  readonly createdByUserId: string;
+}
+
+/**
+ * §6.3 chunking (specs/p4-narration/spec.md).
+ *
+ * 25 sits in the middle of the reliability curve: comfortably within what a model
+ * counts and orders correctly, while a rejected chunk re-spends 25 blocks rather
+ * than half a lesson. MAX_TRIES is §6.3's "1 try + 2 retries" and is the one of
+ * the three the product spec fixes.
+ */
+export const NARRATION_CHUNK_BLOCK_COUNT = 25;
+export const NARRATION_CHUNK_MAX_TRIES = 3;
+
+/**
+ * Whole-run ceiling on provider calls, so a pathological lesson cannot fan the
+ * per-chunk budget out into dozens of paid calls. Worst case is
+ * 3 x chunkCount, so this binds only above 13 chunks — past roughly 325 blocks,
+ * where refusing is the honest answer and §4.1 wants smaller lessons anyway.
+ */
+export const NARRATION_RUN_MAX_CALLS = 40;

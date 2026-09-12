@@ -73,3 +73,19 @@ export function blockListChecksum(blockList: BlockList): string {
   const canonical = canonicalJson(blockList.blocks.map(semanticProjection));
   return bytesToHex(sha256(utf8ToBytes(canonical)));
 }
+
+/**
+ * The same projection, hashed for ONE block. P4's narration segments store this
+ * as `sourceBlockChecksum`, which is how regeneration tells an edited block from
+ * an untouched one and how §6.5 staleness is reported per block rather than per
+ * lesson.
+ *
+ * DELIBERATELY NOT the definition of blockListChecksum above. Redefining the
+ * list hash as a hash over these would be tidier and would change every stored
+ * `draft_content_checksum`, marking every existing lesson changed for a refactor
+ * nobody asked for. The two are independent by choice; the pinned fixtures in
+ * test/checksum.spec.ts exist to make that choice fail loudly if it is revisited.
+ */
+export function blockChecksum(block: Block): string {
+  return bytesToHex(sha256(utf8ToBytes(canonicalJson(semanticProjection(block)))));
+}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseLessonMarkdown } from '../src/blocks';
-import { blockListChecksum, canonicalJson } from '../src/checksum';
+import { blockChecksum, blockListChecksum, canonicalJson } from '../src/checksum';
 import type { BlockList } from '../src/types';
 
 /**
@@ -95,5 +95,69 @@ describe('the checksum itself', () => {
 
   it('is empty-list stable', () => {
     expect(checksumOf('')).toBe(checksumOf(''));
+  });
+});
+
+/**
+ * §6.5's chain has one link per phase, and the head of it is already stored on
+ * every lesson. P4 adds `blockChecksum` beside `blockListChecksum`, which
+ * invites a tidy refactor: redefine the list hash as a hash over the per-block
+ * hashes. That would be silent and expensive — every stored
+ * `draft_content_checksum` would change, every lesson would look edited, and
+ * every narration script written after it would be born stale.
+ *
+ * These fixtures are hard-coded on purpose. If one fails, the refactor is the
+ * bug; do not update the constant.
+ */
+describe('blockListChecksum output is pinned', () => {
+  it('is unchanged for a heading and a paragraph', () => {
+    expect(checksumOf('# Title\n\nOne two three four.\n')).toBe(
+      '246a91ac4e5450395556bdd755e76eeb13661ac25f8e39c54decdb241a108864',
+    );
+  });
+
+  it('is unchanged for a captioned table and a figure', () => {
+    expect(checksumOf('::caption[Cap]\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n::figure\n')).toBe(
+      '81fd43f6e21dc4734ed196b4e93d4a556e27a460885ff9bc0fb9f89c38f0c3a1',
+    );
+  });
+});
+
+describe('blockChecksum', () => {
+  const first = (markdown: string, previous: BlockList | null = null) => {
+    const block = parse(markdown, previous).blocks[0];
+    if (!block) throw new Error('expected at least one block');
+    return block;
+  };
+
+  it('is a 64-character hex sha256', () => {
+    expect(blockChecksum(first('One.\n'))).toMatch(/^[0-9a-f]{64}$/u);
+  });
+
+  it('ignores a reflowed paragraph, exactly as the list checksum does', () => {
+    const original = parse('One two three four.\n');
+    expect(blockChecksum(first('One two\nthree four.\n', original))).toBe(
+      blockChecksum(original.blocks[0]!),
+    );
+  });
+
+  it('notices a changed word', () => {
+    const original = parse('Hiragana is a syllabary.\n');
+    expect(blockChecksum(first('Hiragana is an alphabet.\n', original))).not.toBe(
+      blockChecksum(original.blocks[0]!),
+    );
+  });
+
+  it('notices a figure being renumbered, so an inserted figure stales its neighbour', () => {
+    const original = parse('::figure\n');
+    const renumbered = parse('::figure\n\n::figure\n', original);
+    const moved = renumbered.blocks.find((block) => block.blockId === original.blocks[0]!.blockId);
+    expect(moved).toBeDefined();
+    expect(blockChecksum(moved!)).not.toBe(blockChecksum(original.blocks[0]!));
+  });
+
+  it('distinguishes two blocks that differ only by blockId', () => {
+    const list = parse('Same.\n\nSame.\n');
+    expect(blockChecksum(list.blocks[0]!)).not.toBe(blockChecksum(list.blocks[1]!));
   });
 });
