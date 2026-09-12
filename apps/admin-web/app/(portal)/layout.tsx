@@ -14,22 +14,15 @@ export default async function PortalLayout({ children }: { children: ReactNode }
   if (!session?.user) redirect('/signin');
 
   return (
-    <div style={{ maxWidth: '72rem', margin: '0 auto', padding: '1.5rem' }}>
-      <header
-        style={{
-          display: 'flex',
-          gap: '1rem',
-          alignItems: 'baseline',
-          borderBottom: '1px solid #ddd',
-          paddingBottom: '0.75rem',
-          marginBottom: '1.5rem',
-        }}
-      >
+    <div className="portal-main">
+      <header className="mb-6 flex items-baseline gap-4 border-b border-slate-200 pb-3">
         <strong>Knowledge Explorer</strong>
-        <nav style={{ display: 'flex', gap: '1rem' }}>
-          <Link href="/import">Import</Link>
+        <nav className="flex gap-4">
+          <Link className="text-sky-700 hover:underline" href="/import">
+            Import
+          </Link>
         </nav>
-        <span style={{ marginLeft: 'auto', color: '#666' }}>{session.user.email}</span>
+        <span className="ml-auto text-slate-500">{session.user.email}</span>
       </header>
       <main>{children}</main>
     </div>

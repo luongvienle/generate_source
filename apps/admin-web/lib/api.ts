@@ -10,6 +10,8 @@ export interface ApiFailure {
   readonly status: number;
   readonly errorCode?: string;
   readonly issues?: ReadonlyArray<{ path: string; message: string }>;
+  /** FR-EDIT-01: lesson-content validation locates each failure by line and column. */
+  readonly errors?: ReadonlyArray<{ message: string; line: number; column: number }>;
   readonly reason?: string;
 }
 
@@ -34,6 +36,9 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
       errorCode: typeof body['errorCode'] === 'string' ? body['errorCode'] : undefined,
       issues: Array.isArray(body['issues'])
         ? (body['issues'] as ReadonlyArray<{ path: string; message: string }>)
+        : undefined,
+      errors: Array.isArray(body['errors'])
+        ? (body['errors'] as ReadonlyArray<{ message: string; line: number; column: number }>)
         : undefined,
       reason: typeof body['reason'] === 'string' ? body['reason'] : undefined,
     });

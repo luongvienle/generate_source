@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
 import { ApiError, apiFetch } from '../lib/api';
 import { toStructurePayload, type AdminSummary, type CourseTree, type TreeChapter } from '../lib/tree-types';
 
@@ -211,6 +212,12 @@ export function CurriculumTree({
                     }
                   />
                   <span style={{ color: '#666' }}> ({lesson.contentStatus})</span>
+                  <Link
+                    href={`/courses/${courseId}/lessons/${lesson.id}`}
+                    data-testid="lesson-edit"
+                  >
+                    Edit content
+                  </Link>
                   <button
                     type="button"
                     data-testid="lesson-up"

@@ -1,8 +1,9 @@
-import { createHash, randomBytes } from 'node:crypto';
-import { expect, test, type Page } from '@playwright/test';
+import { randomBytes } from 'node:crypto';
+import { expect, test } from '@playwright/test';
 import { config as loadEnv } from 'dotenv';
 import { getPrismaClient } from '@knowledge-explorer/database';
 import { SCHEMA_VERSION } from '@knowledge-explorer/content';
+import { signIn } from './helpers';
 
 loadEnv({ path: ['../../.env', '.env'] });
 
@@ -46,23 +47,6 @@ const payload = (titleSuffix = '') => ({
   ],
 });
 
-/** Consumes a real Auth.js magic link: the token is stored as sha256(raw + AUTH_SECRET). */
-async function signIn(page: Page, email: string): Promise<void> {
-  const raw = randomBytes(32).toString('hex');
-  const secret = process.env['AUTH_SECRET'] ?? '';
-  await prisma.verificationToken.create({
-    data: {
-      identifier: email,
-      token: createHash('sha256').update(`${raw}${secret}`).digest('hex'),
-      expires: new Date(Date.now() + 10 * 60_000),
-    },
-  });
-
-  await page.goto(
-    `/api/auth/callback/email?token=${raw}&email=${encodeURIComponent(email)}&callbackUrl=${encodeURIComponent('/import')}`,
-  );
-  await expect(page.getByTestId('payload')).toBeVisible();
-}
 
 test.beforeAll(async () => {
   await prisma.user.create({ data: { email: ownerEmail, name: 'Owner', userRole: 'admin_owner' } });
@@ -86,7 +70,7 @@ test.afterAll(async () => {
 
 test('an owner imports an outline and reorders the tree it produced', async ({ page }) => {
   // 1. Sign in through a real single-use magic link.
-  await signIn(page, ownerEmail);
+  await signIn(page, ownerEmail, '/import', 'payload');
 
   // 2. The prompt template is downloadable and declares the shipped version.
   const templateHref = await page.getByTestId('template-download').getAttribute('href');
@@ -149,7 +133,7 @@ test('an owner imports an outline and reorders the tree it produced', async ({ p
 });
 
 test('an admin cannot assign, in the UI or past it', async ({ page }) => {
-  await signIn(page, adminEmail);
+  await signIn(page, adminEmail, '/import', 'payload');
 
   const course = await prisma.course.findUniqueOrThrow({
     where: { slug: `${categorySlug}-n5` },

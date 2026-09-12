@@ -1,0 +1,21 @@
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
+
+/*
+ * The admin portal targets 1280 px and wider (NFR-09).
+ *
+ * Most screens sit in a readable 72rem column. The lesson editor is the
+ * exception: a split view needs the viewport, so any page rendering an element
+ * marked [data-wide] releases the clamp.
+ */
+.portal-main {
+  margin-inline: auto;
+  width: 100%;
+  max-width: 72rem;
+  padding-inline: 1rem;
+  padding-block: 1.5rem;
+}
+
+.portal-main:has([data-wide]) {
+  max-width: none;
+}
