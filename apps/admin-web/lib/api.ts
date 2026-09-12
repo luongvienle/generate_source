@@ -13,6 +13,15 @@ export interface ApiFailure {
   /** FR-EDIT-01: lesson-content validation locates each failure by line and column. */
   readonly errors?: ReadonlyArray<{ message: string; line: number; column: number }>;
   readonly reason?: string;
+  /**
+   * The whole parsed error body.
+   *
+   * The named fields above cover what every endpoint returns; an endpoint that
+   * carries its own detail — P4's `figures` on SCRIPT_FIGURES_INCOMPLETE, its
+   * `jobId` on SCRIPT_GENERATION_IN_FLIGHT — reads it from here rather than
+   * growing this interface a field per endpoint.
+   */
+  readonly body?: Record<string, unknown>;
 }
 
 export class ApiError extends Error {
@@ -41,6 +50,7 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
         ? (body['errors'] as ReadonlyArray<{ message: string; line: number; column: number }>)
         : undefined,
       reason: typeof body['reason'] === 'string' ? body['reason'] : undefined,
+      body,
     });
   }
 
@@ -67,6 +77,7 @@ export async function apiUpload<T>(path: string, form: FormData): Promise<T> {
     throw new ApiError({
       status: response.status,
       errorCode: typeof body['errorCode'] === 'string' ? body['errorCode'] : undefined,
+      body,
     });
   }
 

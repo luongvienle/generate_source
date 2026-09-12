@@ -8,6 +8,12 @@ export interface JobSnapshot {
   finishedAt: string | null;
   errorMessage: string | null;
   result: unknown;
+  /**
+   * Interior progress, for a job that reports it. P4's narration run is several
+   * provider calls, and `{ done, total }` counts VALIDATED chunks — a retry never
+   * moves it backwards. Absent on jobs that report none.
+   */
+  progress?: { done: number; total: number } | null;
 }
 
 export interface ImportPlanCounts {

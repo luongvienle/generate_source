@@ -6,6 +6,7 @@ import { parseLessonMarkdown, type BlockList } from '@knowledge-explorer/content
 import { LessonBody } from '@knowledge-explorer/content/render';
 import type { FigureImages } from '@knowledge-explorer/content';
 import { ImageDrawer } from './image-drawer';
+import { NarrationTab } from './narration-tab';
 import { figureNumberFromEvent, resolveFigureBlockId } from '../../lib/figure-resolve';
 import { lessonImagesPath, type LessonImagesView } from '../../lib/image-types';
 import { ApiError, apiFetch } from '../../lib/api';
@@ -58,6 +59,19 @@ export function LessonEditor({ lessonId, title }: { lessonId: string; title: str
   const [drawerBlockId, setDrawerBlockId] = useState<string | null>(null);
   /** A figure clicked while the buffer was dirty, reopened once the save lands. */
   const [pendingFigureNumber, setPendingFigureNumber] = useState<number | null>(null);
+  const [tab, setTab] = useState<'write' | 'narration'>('write');
+  /**
+   * Flush-then-generate, the same two-phase shape the figure path above uses.
+   *
+   * `useAutosave().flush()` returns void rather than a promise, so it cannot be
+   * awaited: the intent is recorded here, `flush()` is called, and an effect
+   * fires once the buffer is clean. Unlike the figure path this one can be
+   * CANCELLED — a save that fails must enqueue nothing, or the admin pays for a
+   * script of a paragraph the server never accepted.
+   */
+  const [pendingGeneration, setPendingGeneration] = useState<
+    'idle' | 'flushing' | 'go' | 'cancelled'
+  >('idle');
 
   const editor = useRef<EditorHandle | null>(null);
 
@@ -252,6 +266,44 @@ export function LessonEditor({ lessonId, title }: { lessonId: string; title: str
     if (blockId) setDrawerBlockId(blockId);
   }, [pendingFigureNumber, autosave.hasUnsavedWork, savedBlockList, preview.ok]);
 
+  const requestGeneration = useCallback(() => {
+    setPendingGeneration('idle');
+    if (!autosave.hasUnsavedWork) {
+      setPendingGeneration('go');
+      return;
+    }
+    setPendingGeneration('flushing');
+    autosave.flush();
+  }, [autosave]);
+
+  /**
+   * The other half of flush-then-generate.
+   *
+   * `conflict` and `invalid` are checked BEFORE `hasUnsavedWork`, and that
+   * ordering is load-bearing: neither advances `savedValue`, so the buffer stays
+   * dirty forever and waiting for it to go clean would leave Generate disabled
+   * with no explanation. `retrying` is deliberately not terminal — the save may
+   * still land, and SaveStatus is already telling the admin it is retrying.
+   */
+  useEffect(() => {
+    if (pendingGeneration !== 'flushing') return;
+
+    const kind = autosave.state.kind;
+    if (kind === 'conflict' || kind === 'invalid') {
+      setPendingGeneration('cancelled');
+      return;
+    }
+    if (!autosave.hasUnsavedWork) setPendingGeneration('go');
+  }, [pendingGeneration, autosave.hasUnsavedWork, autosave.state.kind]);
+
+  // The tab consumes 'go' exactly once; reset so a second click can arm again.
+  // 'cancelled' is left standing, so the tab can explain why nothing happened.
+  useEffect(() => {
+    if (pendingGeneration !== 'go') return undefined;
+    const timer = setTimeout(() => setPendingGeneration('idle'), 0);
+    return () => clearTimeout(timer);
+  }, [pendingGeneration]);
+
   // A figure deleted from the markdown must not leave its drawer open over it.
   useEffect(() => {
     if (!drawerBlockId || !savedBlockList) return;
@@ -275,6 +327,33 @@ export function LessonEditor({ lessonId, title }: { lessonId: string; title: str
 
       {!canEdit ? <ReadOnlyBanner reason={readOnlyReason} /> : null}
 
+      <nav data-testid="lesson-tabs" className="flex gap-2 border-b border-slate-200">
+        {(['write', 'narration'] as const).map((name) => (
+          <button
+            key={name}
+            type="button"
+            data-testid={`tab-${name}`}
+            aria-current={tab === name ? 'page' : undefined}
+            onClick={() => setTab(name)}
+            className={`px-3 py-1 text-sm ${
+              tab === name ? 'border-b-2 border-slate-800 font-semibold' : 'text-slate-600'
+            }`}
+          >
+            {name === 'write' ? 'Write' : 'Narration'}
+          </button>
+        ))}
+      </nav>
+
+      {tab === 'narration' ? (
+        <NarrationTab
+          lessonId={lessonId}
+          canEdit={canEdit}
+          onGenerateRequested={requestGeneration}
+          pendingGeneration={pendingGeneration}
+        />
+      ) : null}
+
+      <div className={tab === 'write' ? 'space-y-3' : 'hidden'}>
       <Toolbar editor={editor} disabled={!canEdit} />
       <ValidationErrors errors={errors} />
 
@@ -309,6 +388,7 @@ export function LessonEditor({ lessonId, title }: { lessonId: string; title: str
       </div>
 
       <StatusBar blockList={blockList} />
+      </div>
     </section>
   );
 }
