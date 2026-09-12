@@ -375,7 +375,7 @@ describe('deny-by-default', () => {
  * that the gate exists at all, which is what removing a @RequirePermission would
  * break and what deny-by-default is meant to catch.
  */
-describe('§3 gate on every route P1 and P2 add', () => {
+describe('§3 gate on every route P1, P2 and P3 add', () => {
   type Method = 'get' | 'post' | 'patch' | 'put' | 'delete';
   interface Route {
     readonly name: string;
@@ -417,7 +417,12 @@ describe('§3 gate on every route P1 and P2 add', () => {
       name: 'GET /jobs/:jobId/stream',
       method: 'get',
       path: () => '/api/admin/jobs/does-not-exist/stream',
-      allowed: ['owner'],
+      // §9.3 lists the streams as admin-or-owner. P1 could declare the narrower
+      // `importCurriculumOutline` because import was the only producer; with a
+      // second one the §3 gate is the broader action and JobWatchGuard narrows
+      // per job — job-stream.e2e-spec.ts asserts an admin is still refused an
+      // import job.
+      allowed: ['owner', 'admin'],
     },
     {
       name: 'POST /categories',
@@ -483,6 +488,34 @@ describe('§3 gate on every route P1 and P2 add', () => {
       method: 'put',
       path: () => `/api/admin/lessons/${ids.publishedLesson}/content`,
       body: () => ({ markdown: '# rbac probe\n' }),
+      allowed: ['owner', 'admin'],
+    },
+    {
+      name: 'GET /lessons/:id/images',
+      method: 'get',
+      path: () => `/api/admin/lessons/${ids.publishedLesson}/images`,
+      allowed: ['owner', 'admin'],
+    },
+    {
+      name: 'POST /lessons/:id/images/upload',
+      method: 'post',
+      path: () => `/api/admin/lessons/${ids.publishedLesson}/images/upload`,
+      body: () => ({ blockReferenceId: 'fig1' }),
+      allowed: ['owner', 'admin'],
+    },
+    {
+      name: 'GET /courses/:courseId/stream',
+      method: 'get',
+      path: () => `/api/admin/courses/${ids.draftCourse}/stream`,
+      allowed: ['owner', 'admin'],
+    },
+    {
+      name: 'PATCH /images/:imageId',
+      method: 'patch',
+      // A well-formed id that matches no row: the §3 gate runs before the
+      // handler can 404, which is the whole point of this table.
+      path: () => '/api/admin/images/00000000-0000-0000-0000-000000000000',
+      body: () => ({ isSelected: true }),
       allowed: ['owner', 'admin'],
     },
   ];

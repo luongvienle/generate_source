@@ -52,6 +52,32 @@ export class WriteTargetResolver {
       };
     }
 
+    /**
+     * PATCH /admin/images/:imageId carries no chapter, lesson or course param,
+     * so without this branch the resolver returns undefined, both rule guards
+     * stand aside, and the write is unguarded. R-01 and R-02 reach it through
+     * the image's own lesson.
+     */
+    const imageId = request.params['imageId'];
+    if (imageId) {
+      const image = await this.prisma.client.lessonImage.findUnique({
+        where: { id: imageId },
+        select: {
+          lesson: {
+            select: {
+              assignedAdminId: true,
+              chapter: { select: { course: { select: { publicationStatus: true } } } },
+            },
+          },
+        },
+      });
+      if (!image) return undefined;
+      return {
+        publicationStatus: image.lesson.chapter.course.publicationStatus,
+        assignedAdminIds: [image.lesson.assignedAdminId],
+      };
+    }
+
     const courseId = request.params['courseId'];
     if (courseId) {
       const course = await this.prisma.client.course.findUnique({

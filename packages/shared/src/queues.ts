@@ -57,3 +57,37 @@ export function parseRedisUrl(url: string): RedisConnectionOptions {
     ...(database === '' ? {} : { db: Number(database) }),
   };
 }
+
+/**
+ * The image generation queue (P3): the second producer on the substrate P1
+ * built, and the first one that spends money per job.
+ *
+ * A sibling of the import queue rather than a generalised factory. Two
+ * instances is not enough evidence for an abstraction; P5's audio queue is the
+ * third, and the shared shape will be obvious then. What genuinely must not
+ * drift — attempts, backoff, queue names — already lives in this file.
+ */
+export const IMAGE_QUEUE_NAME = 'image-generation';
+
+export const imageJobNames = {
+  generate: 'generate',
+} as const;
+
+export type ImageJobName = (typeof imageJobNames)[keyof typeof imageJobNames];
+
+/**
+ * What a generate_image job carries.
+ *
+ * `generationJobId` is the generation_jobs row the API created, which
+ * withJobLifecycle drives. The prompt travels FULLY COMPOSED: composition is
+ * versioned (NFR-08) and happens once, at enqueue time, so a retry cannot
+ * silently use a newer template than the one the admin saw.
+ */
+export interface GenerateImageJobData {
+  readonly generationJobId: string;
+  readonly lessonId: string;
+  readonly blockReferenceId: string;
+  readonly composedPrompt: string;
+  readonly candidateCount: number;
+  readonly createdByUserId: string;
+}

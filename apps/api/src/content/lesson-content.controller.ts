@@ -22,7 +22,7 @@ import type { RequestWithSession } from '../auth/session-context';
 import { LessonContentService, type Editor } from './lesson-content.service';
 
 /** FR-AUTH-02: identity comes from the session, never from the request body. */
-const editorOf = (request: RequestWithSession): Editor => {
+export const editorOf = (request: RequestWithSession): Editor => {
   const session = request.sessionContext;
   if (!session) throw new BadRequestException({ errorCode: errorCodes.UNAUTHENTICATED });
   return { userId: session.userId, userRole: session.userRole };

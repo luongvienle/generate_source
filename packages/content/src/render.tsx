@@ -1,7 +1,7 @@
 import type { ReactElement, ReactNode } from 'react';
 import type { Nodes, PhrasingContent, RootContent } from 'mdast';
 import { parseBlockMarkdown } from './blocks';
-import type { Block } from './types';
+import type { Block, FigureImage, FigureImages } from './types';
 
 /**
  * The lesson body renderer, shared by the admin editor's preview pane (P2) and
@@ -121,14 +121,36 @@ const Cell = ({ markdown }: { markdown: string }): ReactNode => {
 };
 
 /**
- * §6.1: a figure's image, caption and alt text live in `lesson_images` and are
- * P3's. P2 renders the numbered slot they will fill.
+ * §6.1: a figure's image, caption and alt text live in `lesson_images`.
+ *
+ * With no entry in the images map this is still P2's numbered slot — which is
+ * what an unillustrated figure looks like in the editor, and what the parser
+ * test suite asserts. The figure number always comes from the block; §6.1
+ * assigns numbering during extraction "and nowhere else", so it is never
+ * recomputed here.
+ *
+ * Rendered through `<img>` and never as inline SVG, so an uploaded SVG cannot
+ * execute even if it somehow reached here unsanitized.
  */
-const Figure = ({ block }: { block: Block }): ReactElement => (
-  <figure data-figure-number={block.figureNumber}>
-    <div className="figure-placeholder">Figure {block.figureNumber}</div>
-  </figure>
-);
+const Figure = ({ block, image }: { block: Block; image?: FigureImage }): ReactElement => {
+  if (!image) {
+    return (
+      <figure data-figure-number={block.figureNumber}>
+        <div className="figure-placeholder">Figure {block.figureNumber}</div>
+      </figure>
+    );
+  }
+
+  return (
+    <figure data-figure-number={block.figureNumber}>
+      <img src={image.url} alt={image.alternativeText} />
+      <figcaption>
+        Figure {block.figureNumber}
+        {image.captionText ? <> — {image.captionText}</> : null}
+      </figcaption>
+    </figure>
+  );
+};
 
 const TableBlock = ({ block }: { block: Block }): ReactElement => (
   <figure data-table-number={block.tableNumber}>
@@ -161,10 +183,10 @@ const TableBlock = ({ block }: { block: Block }): ReactElement => (
   </figure>
 );
 
-const renderBlock = (block: Block): ReactNode => {
+const renderBlock = (block: Block, images: FigureImages | undefined): ReactNode => {
   switch (block.blockType) {
     case 'figure':
-      return <Figure block={block} />;
+      return <Figure block={block} image={images?.get(block.blockId)} />;
     case 'table':
       return <TableBlock block={block} />;
     default:
@@ -172,12 +194,27 @@ const renderBlock = (block: Block): ReactNode => {
   }
 };
 
-export function LessonBody({ blocks }: { blocks: readonly Block[] }): ReactElement {
+/**
+ * `images` is optional and defaults to empty, so every P2 call site and every
+ * existing test keeps working untouched.
+ *
+ * No click handling lives here. This renderer is shared with the learner reader
+ * (P7) and an editor interaction has no business in it; the admin editor
+ * delegates from its preview container instead, reading the `data-figure-number`
+ * this markup already emits.
+ */
+export function LessonBody({
+  blocks,
+  images,
+}: {
+  blocks: readonly Block[];
+  images?: FigureImages;
+}): ReactElement {
   return (
     <div className="lesson-body">
       {blocks.map((block) => (
         <div key={block.blockId} data-block-id={block.blockId}>
-          {renderBlock(block)}
+          {renderBlock(block, images)}
         </div>
       ))}
     </div>

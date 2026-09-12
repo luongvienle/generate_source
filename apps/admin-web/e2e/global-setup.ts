@@ -23,7 +23,7 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
 
   const deadline = Date.now() + 60_000;
   while (Date.now() < deadline) {
-    if (chunks.join('').includes('Consuming the curriculum import queue')) {
+    if (chunks.join('').includes('Worker ready.')) {
       return async () => {
         await new Promise<void>((done) => {
           if (!worker || worker.exitCode !== null) return done();

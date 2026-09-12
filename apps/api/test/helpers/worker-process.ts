@@ -29,7 +29,7 @@ export async function startWorker(env: NodeJS.ProcessEnv): Promise<RunningWorker
 
   const deadline = Date.now() + 30_000;
   while (Date.now() < deadline) {
-    if (output().includes('Consuming the curriculum import queue')) {
+    if (output().includes('Worker ready.')) {
       return {
         process: child,
         output,

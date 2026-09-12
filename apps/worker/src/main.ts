@@ -10,10 +10,16 @@ loadEnv({ path: ['../../.env', '.env'] });
 /**
  * Standalone Nest application: the worker serves no HTTP traffic.
  *
- * It stays resident, unlike P0's boot-and-exit check, because it now consumes
- * the curriculum import queue. Shutdown hooks let Nest close the BullMQ worker
- * and its Redis connections before the process ends, so a job in flight is not
- * abandoned mid-transaction.
+ * It stays resident, unlike P0's boot-and-exit check, because it consumes the
+ * curriculum import and image generation queues. Shutdown hooks let Nest close
+ * the BullMQ workers and their Redis connections before the process ends, so a
+ * job in flight is not abandoned mid-transaction.
+ *
+ * The readiness line below is matched by apps/api/test/helpers/worker-process.ts
+ * and apps/admin-web/e2e/global-setup.ts. Both wait on the stable `Worker ready.`
+ * PREFIX rather than the queue list, so adding P5's audio queue needs no change
+ * to either — and a missed helper does not present as a 30-second hang with a
+ * message that points nowhere near the cause.
  */
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.createApplicationContext(WorkerModule);
@@ -28,7 +34,7 @@ async function bootstrap(): Promise<void> {
   }
 
   app.enableShutdownHooks();
-  logger.log('Worker ready. Consuming the curriculum import queue.');
+  logger.log('Worker ready. Consuming the curriculum import and image generation queues.');
 }
 
 void bootstrap();

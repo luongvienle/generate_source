@@ -6,6 +6,7 @@ import { RequirePermission } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 import { SessionGuard } from '../auth/session.guard';
 import { isTerminal, JobStatusService, type JobSnapshot } from './job-status.service';
+import { JobWatchGuard } from './job-watch.guard';
 
 /** Fast enough to feel live; a P1 import settles in well under a second. */
 const POLL_INTERVAL_MS = 200;
@@ -21,16 +22,20 @@ const POLL_INTERVAL_MS = 200;
  * That is deliberate: it is correct for a subscriber who arrives *after* the job
  * already finished, which the spec requires and which an event bus handles worst.
  *
- * The declared §3 action is `importCurriculumOutline` because import is the only
- * job type P1 enqueues. P3 adds admin-triggered jobs and must widen this.
+ * §3 IS ENFORCED IN TWO STAGES. RolesGuard can only test the endpoint's one
+ * declared action, and this stream now carries job types with different actions
+ * — so it declares the broader of them, `generateAndSelectImages`, and
+ * JobWatchGuard then applies the specific job's own action and, for a
+ * lesson-targeted job, R-02. An admin therefore reaches their own image job and
+ * is still refused the owner's import job.
  */
 @Controller('admin/jobs')
-@UseGuards(SessionGuard, RolesGuard)
+@UseGuards(SessionGuard, RolesGuard, JobWatchGuard)
 export class JobsController {
   constructor(@Inject(JobStatusService) private readonly jobs: JobStatusService) {}
 
   @Sse(':jobId/stream')
-  @RequirePermission('importCurriculumOutline')
+  @RequirePermission('generateAndSelectImages')
   stream(@Param('jobId') jobId: string): Observable<{ data: JobSnapshot | { errorCode: string } }> {
     const unknown = { errorCode: errorCodes.JOB_NOT_FOUND, jobId };
 

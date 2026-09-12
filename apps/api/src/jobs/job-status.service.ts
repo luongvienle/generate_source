@@ -1,18 +1,20 @@
 import { Inject, Injectable } from '@nestjs/common';
+import type { Job } from 'bullmq';
 import type { JobStatus, JobType } from '@knowledge-explorer/shared';
 import { dryRunResultKey, importJobNames } from '@knowledge-explorer/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { ImportQueue } from './import.queue';
+import { IMAGE_JOB_ID_PREFIX, ImageQueue } from './image.queue';
 
 /**
- * One shape for both kinds of job, so the SSE endpoint does not care which it is
- * watching.
+ * One shape for every kind of job, so the SSE endpoints do not care which they
+ * are watching.
  *
  * A commit has a generation_jobs row and that row is authoritative — it is the
  * durable record, and between retries it reads `running` while BullMQ reports
- * `delayed`, which is the more useful answer for someone watching a progress bar.
- * A dry run has no row at all (FR-IMP-02), so its state comes from BullMQ and its
- * result from the Redis key the processor wrote.
+ * `delayed`, which is the more useful answer for someone watching a progress
+ * bar. A dry run has no row at all (FR-IMP-02), so its state comes from BullMQ
+ * and its result from the Redis key the processor wrote.
  */
 export interface JobSnapshot {
   readonly jobId: string;
@@ -23,6 +25,12 @@ export interface JobSnapshot {
   readonly finishedAt: string | null;
   readonly errorMessage: string | null;
   readonly result: unknown;
+  /**
+   * Added in P3 so the stream guard can apply R-02 without a second lookup.
+   * Additive: apps/admin-web mirrors this interface by hand and reads a subset,
+   * so it needs no change.
+   */
+  readonly targetEntityId: string | null;
 }
 
 export const isTerminal = (snapshot: JobSnapshot): boolean =>
@@ -52,19 +60,37 @@ function fromBullState(state: string | undefined): JobStatus | 'unknown' {
 @Injectable()
 export class JobStatusService {
   constructor(
-    @Inject(ImportQueue) private readonly queue: ImportQueue,
+    @Inject(ImportQueue) private readonly importQueue: ImportQueue,
+    @Inject(ImageQueue) private readonly imageQueue: ImageQueue,
     @Inject(PrismaService) private readonly prisma: PrismaService,
   ) {}
 
-  async snapshot(jobId: string): Promise<JobSnapshot | undefined> {
-    const job = await this.queue.queue.getJob(jobId);
-    if (!job) return undefined;
+  /**
+   * Resolves a qualified or unqualified job id to its job and its queue.
+   *
+   * Unprefixed ids belong to the import queue, which is the format P1 minted
+   * and its screens still hold. Anything prefixed `image:` is looked up in the
+   * image queue — see ImageQueue.enqueueGenerate for why ids are qualified.
+   */
+  private async locate(jobId: string): Promise<{ job: Job; isImport: boolean } | undefined> {
+    if (jobId.startsWith(IMAGE_JOB_ID_PREFIX)) {
+      const job = await this.imageQueue.queue.getJob(jobId.slice(IMAGE_JOB_ID_PREFIX.length));
+      return job ? { job, isImport: false } : undefined;
+    }
 
-    const isDryRun = job.name === importJobNames.dryRun;
+    const job = await this.importQueue.queue.getJob(jobId);
+    return job ? { job, isImport: true } : undefined;
+  }
+
+  async snapshot(jobId: string): Promise<JobSnapshot | undefined> {
+    const located = await this.locate(jobId);
+    if (!located) return undefined;
+
+    const { job, isImport } = located;
     const bullStatus = fromBullState(await job.getState());
 
-    if (isDryRun) {
-      const cached = await this.queue.readKey(dryRunResultKey(jobId));
+    if (isImport && job.name === importJobNames.dryRun) {
+      const cached = await this.importQueue.readKey(dryRunResultKey(job.id as string));
       return {
         jobId,
         jobType: 'dry_run',
@@ -74,6 +100,7 @@ export class JobStatusService {
         finishedAt: job.finishedOn ? new Date(job.finishedOn).toISOString() : null,
         errorMessage: job.failedReason ?? null,
         result: cached === null ? null : (JSON.parse(cached) as unknown),
+        targetEntityId: null,
       };
     }
 
@@ -84,13 +111,16 @@ export class JobStatusService {
 
     return {
       jobId,
-      jobType: (row?.jobType as JobType | undefined) ?? 'import_course_outline',
+      jobType:
+        (row?.jobType as JobType | undefined) ??
+        (isImport ? 'import_course_outline' : 'generate_image'),
       jobStatus: (row?.jobStatus as JobStatus | undefined) ?? bullStatus,
       attemptCount: row?.attemptCount ?? job.attemptsMade,
       startedAt: row?.startedAt?.toISOString() ?? null,
       finishedAt: row?.finishedAt?.toISOString() ?? null,
       errorMessage: row?.errorMessage ?? job.failedReason ?? null,
       result: (job.returnvalue as unknown) ?? null,
+      targetEntityId: row?.targetEntityId ?? null,
     };
   }
 }

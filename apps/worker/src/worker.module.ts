@@ -1,7 +1,9 @@
 import { Module } from '@nestjs/common';
 import { REDIS_URL, RedisService } from './redis.service';
 import { ImportWorkerService } from './jobs/import-worker.service';
+import { ImageWorkerService } from './jobs/image-worker.service';
 import { PrismaService } from './prisma.service';
+import { OBJECT_STORAGE, S3ObjectStorage, s3ConfigFromEnv } from '@knowledge-explorer/storage';
 
 @Module({
   providers: [
@@ -9,6 +11,8 @@ import { PrismaService } from './prisma.service';
     RedisService,
     PrismaService,
     ImportWorkerService,
+    ImageWorkerService,
+    { provide: OBJECT_STORAGE, useFactory: () => new S3ObjectStorage(s3ConfigFromEnv()) },
   ],
 })
 export class WorkerModule {}

@@ -48,7 +48,7 @@ export interface Editor {
 const emptyBlockList: BlockList = { blocks: [], nextBlockSeq: 1 };
 
 /** §8 stores the block list as JSONB; Prisma hands it back as `unknown`. */
-const readBlockList = (value: unknown): BlockList => {
+export const readBlockList = (value: unknown): BlockList => {
   if (value && typeof value === 'object' && 'blocks' in value && 'nextBlockSeq' in value) {
     return value as BlockList;
   }

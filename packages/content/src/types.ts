@@ -55,6 +55,25 @@ export interface BlockList {
   readonly nextBlockSeq: number;
 }
 
+/**
+ * What P3 fills a figure block's slot with (§6.2, FR-IMG-03).
+ *
+ * `url` is short-lived and presigned; it is never persisted anywhere and never
+ * equals `lesson_images.image_file_url`, which stores an object key. Caption and
+ * alt text come from the SELECTED candidate — the only row either is read from.
+ */
+export interface FigureImage {
+  readonly url: string;
+  readonly captionText: string;
+  readonly alternativeText: string;
+}
+
+/**
+ * Keyed by `blockId`, never by figure number: the number moves when a figure is
+ * inserted above, and the id does not (FR-EDIT-02).
+ */
+export type FigureImages = ReadonlyMap<string, FigureImage>;
+
 /** FR-EDIT-01: every error is reported with its position, never just the first. */
 export interface ParseError {
   readonly message: string;
