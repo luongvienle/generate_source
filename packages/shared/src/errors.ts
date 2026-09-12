@@ -15,6 +15,16 @@ export const errorCodes = {
   FORBIDDEN_NOT_ASSIGNED: 'FORBIDDEN_NOT_ASSIGNED',
   /** The account exists but is_active is false. */
   ACCOUNT_DISABLED: 'ACCOUNT_DISABLED',
+  /** The request set a field only admin_owner may write, such as assignedAdminId. */
+  FORBIDDEN_OWNER_ONLY_FIELD: 'FORBIDDEN_OWNER_ONLY_FIELD',
+  /** FR-IMP-03: the payload's schemaVersion is not the version the server ships. */
+  IMPORT_SCHEMA_VERSION_MISMATCH: 'IMPORT_SCHEMA_VERSION_MISMATCH',
+  /** FR-IMP-01: the payload failed §9.1 validation; every error carries a JSON path. */
+  IMPORT_PAYLOAD_INVALID: 'IMPORT_PAYLOAD_INVALID',
+  /** FR-EDIT-04: the structure payload does not describe this course's rows exactly. */
+  STRUCTURE_MISMATCH: 'STRUCTURE_MISMATCH',
+  /** No job with this id is known to Redis or generation_jobs. */
+  JOB_NOT_FOUND: 'JOB_NOT_FOUND',
 } as const;
 
 export type ErrorCode = (typeof errorCodes)[keyof typeof errorCodes];

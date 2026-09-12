@@ -5,16 +5,22 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "start": "tsx src/main.ts",
-    "build": "tsc --outDir dist"
+    "build": "tsc --outDir dist",
+    "test": "vitest run"
   },
   "devDependencies": {
     "@knowledge-explorer/shared": "workspace:*",
+    "@types/node": "^22.20.2",
     "dotenv": "^17.4.2",
-    "tsx": "^4.23.13"
+    "tsx": "^4.23.13",
+    "vitest": "^5.0.0"
   },
   "dependencies": {
+    "@knowledge-explorer/content": "workspace:*",
+    "@knowledge-explorer/database": "workspace:*",
     "@nestjs/common": "^12.0.1",
     "@nestjs/core": "^12.0.1",
+    "bullmq": "^5.66.0",
     "ioredis": "^6.0.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2"

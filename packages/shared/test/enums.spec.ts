@@ -34,14 +34,26 @@ const specifiedIn_8_1: Record<string, readonly string[]> = {
   ],
 };
 
+/**
+ * NOT from §8.1 — that table catalogues no members for generation_jobs.job_status.
+ * These are decided by specs/p1-curriculum/spec.md and kept in their own table so
+ * the transcription above stays an honest record of what the product spec fixes.
+ */
+const decidedInP1: Record<string, readonly string[]> = {
+  job_status: ['queued', 'running', 'succeeded', 'failed'],
+};
+
+const everyColumn: Record<string, readonly string[]> = { ...specifiedIn_8_1, ...decidedInP1 };
+
 describe('§8.1 enum-like columns', () => {
-  it('covers every column §8.1 catalogues, and no extras', () => {
-    expect(Object.keys(enumColumns).sort()).toEqual(Object.keys(specifiedIn_8_1).sort());
+  it('covers every catalogued column, and no extras', () => {
+    expect(Object.keys(enumColumns).sort()).toEqual(Object.keys(everyColumn).sort());
   });
 
-  it('catalogues 16 columns across the 15 rows of §8.1', () => {
+  it('catalogues 16 columns across the 15 rows of §8.1, plus job_status from P1', () => {
     // script_status and audio_status share one row in the spec table.
-    expect(Object.keys(enumColumns)).toHaveLength(16);
+    expect(Object.keys(specifiedIn_8_1)).toHaveLength(16);
+    expect(Object.keys(enumColumns)).toHaveLength(17);
     expect(enumColumns.script_status).toEqual(enumColumns.audio_status);
   });
 
@@ -51,6 +63,17 @@ describe('§8.1 enum-like columns', () => {
     });
   }
 
+  for (const [column, expected] of Object.entries(decidedInP1)) {
+    it(`${column} allows exactly the values P1 decided, in order`, () => {
+      expect(enumColumns[column as keyof typeof enumColumns]).toEqual(expected);
+    });
+  }
+
+  it('keeps job_status distinct from the script/audio vocabulary — a job is never stale', () => {
+    expect(enumColumns.job_status).not.toContain('stale');
+    expect(enumColumns.job_status[0]).toBe('queued'); // §8's declared column default
+  });
+
   it('retains the values §7.2 and §7.4 reserve but do not use in v1', () => {
     expect(enumColumns.bundle_inclusion_policy).toContain('snapshot_at_purchase');
     expect(enumColumns.renewal_type).toContain('auto');
@@ -59,7 +82,7 @@ describe('§8.1 enum-like columns', () => {
 
 describe('zod schemas', () => {
   it('accepts every specified value and rejects anything else', () => {
-    for (const [column, expected] of Object.entries(specifiedIn_8_1)) {
+    for (const [column, expected] of Object.entries(everyColumn)) {
       const schemaName = `${column.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase())}Schema`;
       const schema = (shared as Record<string, unknown>)[schemaName];
       expect(schema, `missing export ${schemaName}`).toBeDefined();

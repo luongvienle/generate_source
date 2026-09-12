@@ -5,9 +5,17 @@
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "docs:schema": "tsx scripts/write-json-schema.ts"
   },
   "devDependencies": {
-    "@knowledge-explorer/shared": "workspace:*"
+    "@knowledge-explorer/shared": "workspace:*",
+    "@types/node": "^22.20.2",
+    "tsx": "^4.23.13",
+    "vitest": "^5.0.0"
+  },
+  "dependencies": {
+    "zod": "^4.6.2"
   }
 }

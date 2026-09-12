@@ -90,8 +90,23 @@ export const jobTypeSchema = z.enum(jobTypes);
 export type JobType = (typeof jobTypes)[number];
 
 /**
- * Every enum-like column in §8.1, keyed by its database column name, so tests
- * and tooling can assert coverage without restating the members.
+ * Job execution status.
+ *
+ * NOT catalogued by §8.1, which lists no members for `generation_jobs.job_status`
+ * even though §8 defaults the column to 'queued'. These members are decided by
+ * specs/p1-curriculum/spec.md: job-lifecycle vocabulary, deliberately distinct
+ * from `generationStatuses` above because a job is never 'stale'.
+ */
+export const jobStatuses = ['queued', 'running', 'succeeded', 'failed'] as const;
+export const jobStatusSchema = z.enum(jobStatuses);
+export type JobStatus = (typeof jobStatuses)[number];
+
+/**
+ * Every enum-like column, keyed by its database column name, so tests and
+ * tooling can assert coverage without restating the members.
+ *
+ * All but the last are catalogued by §8.1; `job_status` is not — see its
+ * declaration above.
  */
 export const enumColumns = {
   user_role: userRoles,
@@ -110,4 +125,5 @@ export const enumColumns = {
   progress_status: progressStatuses,
   request_status: requestStatuses,
   job_type: jobTypes,
+  job_status: jobStatuses,
 } as const;
