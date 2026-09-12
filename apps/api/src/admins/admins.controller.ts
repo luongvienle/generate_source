@@ -97,6 +97,20 @@ export class AdminsController {
       throw error;
     }
   }
+  /**
+   * Not in §9.2's table, which lists only POST and PATCH. Added because
+   * assignment (§12 P1) is an owner choosing among admins, and the owner cannot
+   * choose from a list that no endpoint serves.
+   */
+  @Get()
+  @RequirePermission('manageAdminAccounts')
+  async list() {
+    return this.prisma.client.user.findMany({
+      where: { userRole: { in: ['admin', 'admin_owner'] } },
+      orderBy: { email: 'asc' },
+      select: { id: true, email: true, name: true, userRole: true, isActive: true },
+    });
+  }
 }
 
 /**

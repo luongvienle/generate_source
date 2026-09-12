@@ -4,13 +4,19 @@ import type { RequestWithSession } from './session-context';
 
 export interface WriteTarget {
   readonly publicationStatus: string;
-  /** assigned_admin_id of the row being written, from §8. */
-  readonly assignedAdminId: string | null;
+  /**
+   * assigned_admin_id of every row the write touches, from §8.
+   *
+   * A list rather than a single value because P1 adds course-scoped writes —
+   * PATCH /courses/:courseId/structure rewrites the ordering of every chapter
+   * and lesson at once, so R-02 has to consider all of them, not one.
+   */
+  readonly assignedAdminIds: ReadonlyArray<string | null>;
 }
 
 /**
- * Resolves the chapter or lesson a request targets, plus the publication status
- * of its course, so R-01 and R-02 both work from one lookup shape.
+ * Resolves the rows a request targets, plus the publication status of their
+ * course, so R-01 and R-02 both work from one lookup shape.
  *
  * Returns undefined when the route carries no recognised target; the guards
  * then stand aside and let the handler produce its own 404.
@@ -29,7 +35,7 @@ export class WriteTargetResolver {
       if (!chapter) return undefined;
       return {
         publicationStatus: chapter.course.publicationStatus,
-        assignedAdminId: chapter.assignedAdminId,
+        assignedAdminIds: [chapter.assignedAdminId],
       };
     }
 
@@ -42,7 +48,32 @@ export class WriteTargetResolver {
       if (!lesson) return undefined;
       return {
         publicationStatus: lesson.chapter.course.publicationStatus,
-        assignedAdminId: lesson.assignedAdminId,
+        assignedAdminIds: [lesson.assignedAdminId],
+      };
+    }
+
+    const courseId = request.params['courseId'];
+    if (courseId) {
+      const course = await this.prisma.client.course.findUnique({
+        where: { id: courseId },
+        select: {
+          publicationStatus: true,
+          chapters: {
+            where: { deletedAt: null },
+            select: {
+              assignedAdminId: true,
+              lessons: { where: { deletedAt: null }, select: { assignedAdminId: true } },
+            },
+          },
+        },
+      });
+      if (!course) return undefined;
+      return {
+        publicationStatus: course.publicationStatus,
+        assignedAdminIds: course.chapters.flatMap((chapter) => [
+          chapter.assignedAdminId,
+          ...chapter.lessons.map((lesson) => lesson.assignedAdminId),
+        ]),
       };
     }
 

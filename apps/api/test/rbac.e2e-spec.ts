@@ -365,3 +365,164 @@ describe('deny-by-default', () => {
     }
   });
 });
+
+/**
+ * Every route P1 adds, gated by §3.
+ *
+ * This asserts only the authorization outcome, not behavior — each route's
+ * behavior lives in import.e2e-spec.ts, structure.e2e-spec.ts,
+ * assignment.e2e-spec.ts and job-stream.e2e-spec.ts. What is under test here is
+ * that the gate exists at all, which is what removing a @RequirePermission would
+ * break and what deny-by-default is meant to catch.
+ */
+describe('§3 gate on every route P1 adds', () => {
+  type Method = 'get' | 'post' | 'patch' | 'delete';
+  interface Route {
+    readonly name: string;
+    readonly method: Method;
+    readonly path: () => string;
+    readonly body?: () => object;
+    /** Roles §3 permits. Everyone else must be refused. */
+    readonly allowed: ReadonlyArray<'owner' | 'admin'>;
+  }
+
+  const routes: readonly Route[] = [
+    {
+      name: 'GET /import-template',
+      method: 'get',
+      path: () => '/api/admin/import-template',
+      allowed: ['owner'],
+    },
+    {
+      name: 'GET /import-schema',
+      method: 'get',
+      path: () => '/api/admin/import-schema',
+      allowed: ['owner'],
+    },
+    {
+      name: 'POST /courses/import/dry-run',
+      method: 'post',
+      path: () => '/api/admin/courses/import/dry-run',
+      body: () => ({}),
+      allowed: ['owner'],
+    },
+    {
+      name: 'POST /courses/import',
+      method: 'post',
+      path: () => '/api/admin/courses/import',
+      body: () => ({}),
+      allowed: ['owner'],
+    },
+    {
+      name: 'GET /jobs/:jobId/stream',
+      method: 'get',
+      path: () => '/api/admin/jobs/does-not-exist/stream',
+      allowed: ['owner'],
+    },
+    {
+      name: 'POST /categories',
+      method: 'post',
+      path: () => '/api/admin/categories',
+      body: () => ({ slug: `gate-${run}`, displayName: 'Gate' }),
+      allowed: ['owner'],
+    },
+    {
+      name: 'PATCH /courses/:id/pricing-type',
+      method: 'patch',
+      path: () => `/api/admin/courses/${ids.draftCourse}/pricing-type`,
+      body: () => ({ pricingType: 'free' }),
+      allowed: ['owner'],
+    },
+    {
+      name: 'PATCH /courses/:id/structure',
+      method: 'patch',
+      path: () => `/api/admin/courses/${ids.draftCourse}/structure`,
+      body: () => ({ chapters: [] }),
+      allowed: ['owner', 'admin'],
+    },
+    {
+      name: 'POST /chapters',
+      method: 'post',
+      path: () => '/api/admin/chapters',
+      body: () => ({}),
+      allowed: ['owner', 'admin'],
+    },
+    {
+      name: 'DELETE /chapters/:id',
+      method: 'delete',
+      path: () => `/api/admin/chapters/${ids.unassignedChapter}`,
+      allowed: ['owner', 'admin'],
+    },
+    {
+      name: 'POST /lessons',
+      method: 'post',
+      path: () => '/api/admin/lessons',
+      body: () => ({}),
+      allowed: ['owner', 'admin'],
+    },
+    {
+      name: 'DELETE /lessons/:id',
+      method: 'delete',
+      path: () => `/api/admin/lessons/${ids.publishedLesson}`,
+      allowed: ['owner', 'admin'],
+    },
+    {
+      name: 'GET /my-assignments',
+      method: 'get',
+      path: () => '/api/admin/my-assignments',
+      allowed: ['owner', 'admin'],
+    },
+  ];
+
+  // Independent of what earlier tests in this file did to these accounts.
+  beforeAll(async () => {
+    await prisma.user.update({ where: { id: ids.adminB }, data: { isActive: true } });
+  });
+
+  /**
+   * Past the §3 gate means neither refusal RolesGuard can produce. Checking only
+   * FORBIDDEN_ROLE would pass vacuously if a route lost its @RequirePermission,
+   * since deny-by-default then answers FORBIDDEN_NO_POLICY instead — which is
+   * exactly the mutation the binding check exercises.
+   */
+  const passedTheGate = (errorCode: unknown): boolean =>
+    errorCode !== errorCodes.FORBIDDEN_ROLE && errorCode !== errorCodes.FORBIDDEN_NO_POLICY;
+
+  const send = (route: Route, token?: string) => {
+    const call = request(app.getHttpServer())[route.method](route.path());
+    if (token) void call.set(as(token));
+    return route.body ? call.send(route.body()) : call;
+  };
+
+  for (const route of routes) {
+    it(`${route.name} refuses a learner`, async () => {
+      const response = await send(route, tokens.learner);
+      expect(response.status).toBe(403);
+      expect(response.body.errorCode).toBe(errorCodes.FORBIDDEN_ROLE);
+    });
+
+    it(`${route.name} answers 401, not 403, when unauthenticated`, async () => {
+      const response = await send(route);
+      expect(response.status).toBe(401);
+      expect(response.body.errorCode).toBe(errorCodes.UNAUTHENTICATED);
+    });
+
+    if (!route.allowed.includes('admin')) {
+      it(`${route.name} refuses an admin`, async () => {
+        const response = await send(route, tokens.adminB);
+        expect(response.status).toBe(403);
+        expect(response.body.errorCode).toBe(errorCodes.FORBIDDEN_ROLE);
+      });
+    } else {
+      it(`${route.name} lets an admin past the §3 gate`, async () => {
+        const response = await send(route, tokens.adminB);
+        expect(passedTheGate(response.body?.errorCode)).toBe(true);
+      });
+    }
+
+    it(`${route.name} lets the owner past the §3 gate`, async () => {
+      const response = await send(route, tokens.owner);
+      expect(passedTheGate(response.body?.errorCode)).toBe(true);
+    });
+  }
+});

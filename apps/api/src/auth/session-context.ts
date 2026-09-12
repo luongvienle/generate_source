@@ -17,6 +17,8 @@ export interface SessionContext {
 export interface RequestWithSession {
   readonly headers: Record<string, string | string[] | undefined>;
   readonly params: Record<string, string | undefined>;
+  /** Read only by OwnerFieldGuard, to refuse an owner-only field before the handler runs. */
+  readonly body?: Record<string, unknown>;
   sessionContext?: SessionContext;
 }
 

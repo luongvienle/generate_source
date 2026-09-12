@@ -37,7 +37,12 @@ export class AssignmentGuard implements CanActivate {
     const target = await this.targets.resolve(request);
     if (!target) return true;
 
-    if (target.assignedAdminId !== null && target.assignedAdminId !== session.userId) {
+    // A course-scoped write touches many rows, so one row belonging to another
+    // admin is enough to refuse the whole request.
+    const blocked = target.assignedAdminIds.some(
+      (assignedAdminId) => assignedAdminId !== null && assignedAdminId !== session.userId,
+    );
+    if (blocked) {
       throw new ForbiddenException({ errorCode: errorCodes.FORBIDDEN_NOT_ASSIGNED });
     }
     return true;
