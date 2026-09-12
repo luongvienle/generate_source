@@ -1,0 +1,24 @@
+{
+  "name": "@knowledge-explorer/storage",
+  "version": "0.0.0",
+  "private": true,
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.735.0",
+    "@aws-sdk/s3-request-presigner": "^3.735.0",
+    "@knowledge-explorer/shared": "workspace:*",
+    "dompurify": "^3.2.3",
+    "jsdom": "^26.0.0"
+  },
+  "devDependencies": {
+    "@types/jsdom": "^21.1.7",
+    "@types/node": "^22.20.2",
+    "dotenv": "^17.4.2",
+    "vitest": "^5.0.0"
+  }
+}

@@ -43,6 +43,17 @@ jobs:
       NEXT_PUBLIC_API_URL: http://localhost:3001
       # Test-only value. Real secrets never live in this file.
       AUTH_SECRET: ci-only-secret-not-used-for-any-real-session
+      # Object storage. Port 9000 is free on a runner, unlike the development
+      # machine where Compose maps MinIO to 9010. The two endpoints hold the
+      # same value here because everything runs on the runner host.
+      S3_ENDPOINT: http://localhost:9000
+      S3_PUBLIC_ENDPOINT: http://localhost:9000
+      S3_REGION: us-east-1
+      S3_BUCKET: knowledge-explorer-media
+      S3_ACCESS_KEY_ID: knowledge_explorer
+      S3_SECRET_ACCESS_KEY: knowledge_explorer
+      # The deterministic fake: CI never calls a paid provider.
+      IMAGE_PROVIDER: fake
 
     steps:
       - uses: actions/checkout@v4
@@ -53,6 +64,28 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: pnpm
+
+      # MinIO cannot be a `services:` container: GitHub Actions has no way to set
+      # a container command, and this image does nothing without `server /data`.
+      # An explicit step is the whole workaround.
+      - name: Start MinIO
+        run: |
+          docker run -d --name minio \
+            -p 9000:9000 -p 9001:9001 \
+            -e MINIO_ROOT_USER=knowledge_explorer \
+            -e MINIO_ROOT_PASSWORD=knowledge_explorer \
+            quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z \
+            server /data --console-address ":9001"
+          for _ in $(seq 1 30); do
+            if curl -fsS http://localhost:9000/minio/health/live >/dev/null; then
+              echo "MinIO ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "MinIO did not become ready"
+          docker logs minio
+          exit 1
 
       - run: pnpm install --frozen-lockfile
 
