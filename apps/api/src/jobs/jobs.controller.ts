@@ -23,8 +23,8 @@ const POLL_INTERVAL_MS = 200;
  * already finished, which the spec requires and which an event bus handles worst.
  *
  * §3 IS ENFORCED IN TWO STAGES. RolesGuard can only test the endpoint's one
- * declared action, and this stream now carries job types with different actions
- * — so it declares the broader of them, `generateAndSelectImages`, and
+ * declared action, and this stream now carries three job types with different actions
+ * — so it declares one they share, `generateAndSelectImages`, and
  * JobWatchGuard then applies the specific job's own action and, for a
  * lesson-targeted job, R-02. An admin therefore reaches their own image job and
  * is still refused the owner's import job.

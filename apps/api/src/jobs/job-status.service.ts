@@ -5,6 +5,7 @@ import { dryRunResultKey, importJobNames } from '@knowledge-explorer/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { ImportQueue } from './import.queue';
 import { IMAGE_JOB_ID_PREFIX, ImageQueue } from './image.queue';
+import { NARRATION_JOB_ID_PREFIX, NarrationQueue } from './narration.queue';
 
 /**
  * One shape for every kind of job, so the SSE endpoints do not care which they
@@ -31,12 +32,45 @@ export interface JobSnapshot {
    * so it needs no change.
    */
   readonly targetEntityId: string | null;
+  /**
+   * Interior progress, for a job that has some. Added in P4 because a narration
+   * run is several provider calls and a lesson-length spinner says nothing;
+   * `{ done, total }` counts VALIDATED chunks, so a retry never moves it
+   * backwards. Read from BullMQ, since the generation_jobs row records durable
+   * state rather than in-flight detail.
+   *
+   * Additive, like targetEntityId in P3: apps/admin-web mirrors this interface by
+   * hand and reads a subset, so nothing there breaks by ignoring it.
+   */
+  readonly progress: { readonly done: number; readonly total: number } | null;
 }
 
 export const isTerminal = (snapshot: JobSnapshot): boolean =>
   snapshot.jobStatus === 'succeeded' ||
   snapshot.jobStatus === 'failed' ||
   snapshot.jobStatus === 'unknown';
+
+/**
+ * Which queue an id belongs to. A discriminant rather than P3's `isImport`
+ * boolean: a third queue made the boolean a lie, and P5's audio queue is the
+ * fourth. Widening happens here, in a CONSUMER — no P1 or P3 producer is touched.
+ */
+type QueueKind = 'import' | 'image' | 'narration';
+
+const fallbackJobTypes: Record<QueueKind, JobType> = {
+  import: 'import_course_outline',
+  image: 'generate_image',
+  narration: 'generate_narration_script',
+};
+
+/** BullMQ's progress is `unknown`; only the shape P4 writes is understood. */
+function readProgress(value: unknown): { done: number; total: number } | null {
+  if (!value || typeof value !== 'object') return null;
+  const shape = value as { done?: unknown; total?: unknown };
+  return typeof shape.done === 'number' && typeof shape.total === 'number'
+    ? { done: shape.done, total: shape.total }
+    : null;
+}
 
 /** BullMQ's vocabulary is not §8.1's; this is the only place the two meet. */
 function fromBullState(state: string | undefined): JobStatus | 'unknown' {
@@ -62,6 +96,7 @@ export class JobStatusService {
   constructor(
     @Inject(ImportQueue) private readonly importQueue: ImportQueue,
     @Inject(ImageQueue) private readonly imageQueue: ImageQueue,
+    @Inject(NarrationQueue) private readonly narrationQueue: NarrationQueue,
     @Inject(PrismaService) private readonly prisma: PrismaService,
   ) {}
 
@@ -72,24 +107,30 @@ export class JobStatusService {
    * and its screens still hold. Anything prefixed `image:` is looked up in the
    * image queue — see ImageQueue.enqueueGenerate for why ids are qualified.
    */
-  private async locate(jobId: string): Promise<{ job: Job; isImport: boolean } | undefined> {
-    if (jobId.startsWith(IMAGE_JOB_ID_PREFIX)) {
-      const job = await this.imageQueue.queue.getJob(jobId.slice(IMAGE_JOB_ID_PREFIX.length));
-      return job ? { job, isImport: false } : undefined;
+  private async locate(jobId: string): Promise<{ job: Job; queue: QueueKind } | undefined> {
+    for (const [prefix, queue, kind] of [
+      [IMAGE_JOB_ID_PREFIX, this.imageQueue.queue, 'image'],
+      [NARRATION_JOB_ID_PREFIX, this.narrationQueue.queue, 'narration'],
+    ] as const) {
+      if (jobId.startsWith(prefix)) {
+        const job = await queue.getJob(jobId.slice(prefix.length));
+        return job ? { job, queue: kind } : undefined;
+      }
     }
 
     const job = await this.importQueue.queue.getJob(jobId);
-    return job ? { job, isImport: true } : undefined;
+    return job ? { job, queue: 'import' } : undefined;
   }
 
   async snapshot(jobId: string): Promise<JobSnapshot | undefined> {
     const located = await this.locate(jobId);
     if (!located) return undefined;
 
-    const { job, isImport } = located;
+    const { job, queue } = located;
     const bullStatus = fromBullState(await job.getState());
+    const progress = readProgress(job.progress);
 
-    if (isImport && job.name === importJobNames.dryRun) {
+    if (queue === 'import' && job.name === importJobNames.dryRun) {
       const cached = await this.importQueue.readKey(dryRunResultKey(job.id as string));
       return {
         jobId,
@@ -101,6 +142,7 @@ export class JobStatusService {
         errorMessage: job.failedReason ?? null,
         result: cached === null ? null : (JSON.parse(cached) as unknown),
         targetEntityId: null,
+        progress,
       };
     }
 
@@ -111,9 +153,7 @@ export class JobStatusService {
 
     return {
       jobId,
-      jobType:
-        (row?.jobType as JobType | undefined) ??
-        (isImport ? 'import_course_outline' : 'generate_image'),
+      jobType: (row?.jobType as JobType | undefined) ?? fallbackJobTypes[queue],
       jobStatus: (row?.jobStatus as JobStatus | undefined) ?? bullStatus,
       attemptCount: row?.attemptCount ?? job.attemptsMade,
       startedAt: row?.startedAt?.toISOString() ?? null,
@@ -121,6 +161,7 @@ export class JobStatusService {
       errorMessage: row?.errorMessage ?? job.failedReason ?? null,
       result: (job.returnvalue as unknown) ?? null,
       targetEntityId: row?.targetEntityId ?? null,
+      progress,
     };
   }
 }

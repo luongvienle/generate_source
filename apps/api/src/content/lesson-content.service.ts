@@ -62,6 +62,43 @@ interface LessonRow {
   chapter: { course: { id: string; publicationStatus: string } };
 }
 
+/** The only facts editability depends on. Structural, so any lesson row fits. */
+export interface EditabilityTarget {
+  readonly assignedAdminId: string | null;
+  readonly chapter: { readonly course: { readonly publicationStatus: string } };
+}
+
+export interface Editability {
+  readonly canEdit: boolean;
+  readonly readOnlyReason: string | null;
+}
+
+/**
+ * Mirrors PublishedLockGuard then AssignmentGuard, in that order, so the reason a
+ * read-only screen shows is the reason the write would actually give.
+ *
+ * ONE COPY, DELIBERATELY. This began as a private static duplicated verbatim in
+ * this service and in images.service.ts; narration would have been the third.
+ * Three copies of an authorization mirror drift silently — change R-01 or R-02
+ * and one copy keeps telling admins they may edit something the API refuses.
+ * `readBlockList` and `Editor` already live here and images already imports them,
+ * so this is where it goes.
+ *
+ * Display only: every write refuses independently through the guard chain, so
+ * the UI carries no enforcement.
+ */
+export function resolveEditability(lesson: EditabilityTarget, editor: Editor): Editability {
+  if (editor.userRole === 'admin_owner') return { canEdit: true, readOnlyReason: null };
+
+  if (lesson.chapter.course.publicationStatus === 'published') {
+    return { canEdit: false, readOnlyReason: errorCodes.FORBIDDEN_COURSE_PUBLISHED };
+  }
+  if (lesson.assignedAdminId !== null && lesson.assignedAdminId !== editor.userId) {
+    return { canEdit: false, readOnlyReason: errorCodes.FORBIDDEN_NOT_ASSIGNED };
+  }
+  return { canEdit: true, readOnlyReason: null };
+}
+
 @Injectable()
 export class LessonContentService {
   constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
@@ -78,25 +115,6 @@ export class LessonContentService {
     });
     if (!lesson) throw new NotFoundException({ errorCode: 'LESSON_NOT_FOUND' });
     return lesson;
-  }
-
-  /**
-   * Mirrors PublishedLockGuard then AssignmentGuard, in that order, so the reason
-   * the editor shows is the reason the PUT would actually give.
-   */
-  private static resolveEditability(
-    lesson: LessonRow,
-    editor: Editor,
-  ): { canEdit: boolean; readOnlyReason: string | null } {
-    if (editor.userRole === 'admin_owner') return { canEdit: true, readOnlyReason: null };
-
-    if (lesson.chapter.course.publicationStatus === 'published') {
-      return { canEdit: false, readOnlyReason: errorCodes.FORBIDDEN_COURSE_PUBLISHED };
-    }
-    if (lesson.assignedAdminId !== null && lesson.assignedAdminId !== editor.userId) {
-      return { canEdit: false, readOnlyReason: errorCodes.FORBIDDEN_NOT_ASSIGNED };
-    }
-    return { canEdit: true, readOnlyReason: null };
   }
 
   private async view(lesson: LessonRow, editor: Editor): Promise<LessonContentView> {
@@ -119,7 +137,7 @@ export class LessonContentService {
       draftUpdatedAt: content?.draftUpdatedAt ?? null,
       lastEditedByUserId: content?.lastEditedByUserId ?? null,
       contentStatus: lesson.contentStatus,
-      ...LessonContentService.resolveEditability(lesson, editor),
+      ...resolveEditability(lesson, editor),
     };
   }
 

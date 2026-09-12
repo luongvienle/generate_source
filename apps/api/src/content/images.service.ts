@@ -7,7 +7,13 @@ import {
   UnprocessableEntityException,
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-import type { Block } from '@knowledge-explorer/content';
+import {
+  figuresMissingNarrationInput,
+  isFigureInputComplete,
+  type Block,
+  type FigureNarrationInput,
+  type IncompleteFigure,
+} from '@knowledge-explorer/content';
 import { errorCodes, type ImageSource } from '@knowledge-explorer/shared';
 import {
   OBJECT_STORAGE,
@@ -20,7 +26,7 @@ import { composeImagePrompt } from '@knowledge-explorer/ai';
 import { createQueuedJob, markJobAttemptFailed } from '@knowledge-explorer/database';
 import { PrismaService } from '../prisma/prisma.service';
 import { ImageQueue } from '../jobs/image.queue';
-import { readBlockList, type Editor } from './lesson-content.service';
+import { readBlockList, resolveEditability, type Editor } from './lesson-content.service';
 
 /**
  * §5.4 lesson images: candidates, selection, caption and alt text.
@@ -88,8 +94,6 @@ interface LessonRow {
   chapter: { course: { id: string; publicationStatus: string } };
 }
 
-const isFilled = (value: string): boolean => value.trim().length > 0;
-
 @Injectable()
 export class ImagesService {
   private readonly logger = new Logger(ImagesService.name);
@@ -112,21 +116,6 @@ export class ImagesService {
     });
     if (!lesson) throw new NotFoundException({ errorCode: 'LESSON_NOT_FOUND' });
     return lesson;
-  }
-
-  /** Mirrors PublishedLockGuard then AssignmentGuard, as the content service does. */
-  private static resolveEditability(
-    lesson: LessonRow,
-    editor: Editor,
-  ): { canEdit: boolean; readOnlyReason: string | null } {
-    if (editor.userRole === 'admin_owner') return { canEdit: true, readOnlyReason: null };
-    if (lesson.chapter.course.publicationStatus === 'published') {
-      return { canEdit: false, readOnlyReason: errorCodes.FORBIDDEN_COURSE_PUBLISHED };
-    }
-    if (lesson.assignedAdminId !== null && lesson.assignedAdminId !== editor.userId) {
-      return { canEdit: false, readOnlyReason: errorCodes.FORBIDDEN_NOT_ASSIGNED };
-    }
-    return { canEdit: true, readOnlyReason: null };
   }
 
   /** The lesson's figure blocks, in document order, from the STORED block list. */
@@ -174,7 +163,13 @@ export class ImagesService {
       selectedImageId: selected?.id ?? null,
       captionText,
       alternativeText,
-      isComplete: selected !== undefined && isFilled(captionText) && isFilled(alternativeText),
+      // FR-IMG-03, from the one shared predicate — P4's worker re-checks the
+      // same rule in a different process and a second copy would be free to drift.
+      isComplete: isFigureInputComplete({
+        hasSelected: selected !== undefined,
+        captionText,
+        alternativeText,
+      }),
     };
   }
 
@@ -203,7 +198,7 @@ export class ImagesService {
       lessonId,
       figures,
       isComplete: figures.every((figure) => figure.isComplete),
-      ...ImagesService.resolveEditability(lesson, editor),
+      ...resolveEditability(lesson, editor),
     };
   }
 
@@ -220,6 +215,32 @@ export class ImagesService {
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     });
     return this.toFigureView(block, rows);
+  }
+
+  /**
+   * Every figure that cannot yet be narrated (FR-SCRIPT-03), for P4's enqueue-time
+   * refusal.
+   *
+   * Deliberately NOT `read()`: that presigns a URL for every candidate of every
+   * figure, which a precondition check has no use for. The completeness rule
+   * itself is the shared predicate, so this cannot disagree with what the drawer
+   * shows.
+   */
+  async incompleteFigures(lessonId: string): Promise<readonly IncompleteFigure[]> {
+    const blocks = await this.figureBlocks(lessonId);
+    const selected = await this.prisma.client.lessonImage.findMany({
+      where: { lessonId, isSelected: true },
+      select: { blockReferenceId: true, captionText: true, alternativeText: true },
+    });
+
+    const inputs = new Map<string, FigureNarrationInput>(
+      selected.map((row) => [
+        row.blockReferenceId,
+        { hasSelected: true, captionText: row.captionText, alternativeText: row.alternativeText },
+      ]),
+    );
+
+    return figuresMissingNarrationInput(blocks, inputs);
   }
 
   /** Refuses a blockReferenceId that is not a figure block in the stored list. */

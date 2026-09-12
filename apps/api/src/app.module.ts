@@ -25,6 +25,9 @@ import { WriteTargetResolver } from './auth/target-resolver';
 import { OwnerFieldGuard } from './auth/owner-field.guard';
 import { ImportQueue, REDIS_URL } from './jobs/import.queue';
 import { ImageQueue } from './jobs/image.queue';
+import { NarrationQueue } from './jobs/narration.queue';
+import { NarrationController } from './content/narration.controller';
+import { NarrationService } from './content/narration.service';
 import { JobStatusService } from './jobs/job-status.service';
 import { JobWatchGuard } from './jobs/job-watch.guard';
 import { OBJECT_STORAGE, S3ObjectStorage, s3ConfigFromEnv } from '@knowledge-explorer/storage';
@@ -38,6 +41,7 @@ import { OBJECT_STORAGE, S3ObjectStorage, s3ConfigFromEnv } from '@knowledge-exp
     LessonsController,
     LessonContentController,
     ImagesController,
+    NarrationController,
     ImportController,
     CategoriesController,
     CoursesController,
@@ -49,6 +53,8 @@ import { OBJECT_STORAGE, S3ObjectStorage, s3ConfigFromEnv } from '@knowledge-exp
     { provide: REDIS_URL, useFactory: () => process.env['REDIS_URL'] ?? 'redis://localhost:6380' },
     ImportQueue,
     ImageQueue,
+    NarrationQueue,
+    NarrationService,
     JobStatusService,
     JobWatchGuard,
     InvitationService,

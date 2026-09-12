@@ -375,7 +375,7 @@ describe('deny-by-default', () => {
  * that the gate exists at all, which is what removing a @RequirePermission would
  * break and what deny-by-default is meant to catch.
  */
-describe('§3 gate on every route P1, P2 and P3 add', () => {
+describe('§3 gate on every route P1, P2, P3 and P4 add', () => {
   type Method = 'get' | 'post' | 'patch' | 'put' | 'delete';
   interface Route {
     readonly name: string;
@@ -385,6 +385,12 @@ describe('§3 gate on every route P1, P2 and P3 add', () => {
     /** Roles §3 permits. Everyone else must be refused. */
     readonly allowed: ReadonlyArray<'owner' | 'admin'>;
   }
+
+  // A well-formed id matching no row, as the images route above uses: the §3
+  // gate runs before the handler can 404, which is the whole point of this table.
+  const NO_SUCH_LESSON = '00000000-0000-0000-0000-000000000000';
+  const NO_SUCH_LESSON_NARRATION = `/api/admin/lessons/${NO_SUCH_LESSON}/narration-script`;
+  const NO_SUCH_LESSON_STALENESS = `/api/admin/lessons/${NO_SUCH_LESSON}/staleness`;
 
   const routes: readonly Route[] = [
     {
@@ -516,6 +522,32 @@ describe('§3 gate on every route P1, P2 and P3 add', () => {
       // handler can 404, which is the whole point of this table.
       path: () => '/api/admin/images/00000000-0000-0000-0000-000000000000',
       body: () => ({ isSelected: true }),
+      allowed: ['owner', 'admin'],
+    },
+    {
+      name: 'GET /lessons/:lessonId/narration-script',
+      method: 'get',
+      path: () => NO_SUCH_LESSON_NARRATION,
+      allowed: ['owner', 'admin'],
+    },
+    {
+      name: 'POST /lessons/:lessonId/narration-script',
+      method: 'post',
+      path: () => NO_SUCH_LESSON_NARRATION,
+      body: () => ({}),
+      allowed: ['owner', 'admin'],
+    },
+    {
+      name: 'PUT /lessons/:lessonId/narration-script',
+      method: 'put',
+      path: () => NO_SUCH_LESSON_NARRATION,
+      body: () => ({ scriptChecksum: 'anything', approve: true }),
+      allowed: ['owner', 'admin'],
+    },
+    {
+      name: 'GET /lessons/:lessonId/staleness',
+      method: 'get',
+      path: () => NO_SUCH_LESSON_STALENESS,
       allowed: ['owner', 'admin'],
     },
   ];
