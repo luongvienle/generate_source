@@ -9,16 +9,20 @@ project_name: create_source
 
 Knowledge Explorer is a course platform — admin-authored lessons with AI
 illustrations, LLM narration and TTS audio, sold as time-limited access. The
-repository is a **pnpm + Turborepo monorepo of nine workspaces** (four apps,
-five packages) on TypeScript and PostgreSQL [verified]. Phase P0 of the
+repository is a **pnpm + Turborepo monorepo of ten workspaces** (four apps,
+six packages) on TypeScript and PostgreSQL [verified]. The sixth package,
+`packages/storage`, is a deliberate addition beyond §11's five-package layout:
+§11 names private object storage as infrastructure but assigns it to no package,
+and the AWS SDK cannot live in `packages/shared`, which the browser reaches
+through `packages/content`. Recorded in `specs/p3-images/spec.md` [verified]. Phase P0 of the
 product spec is complete: the §8 database schema, Auth.js magic-link sign-in
 with database sessions, and the §3 permission matrix enforced by a
-deny-by-default guard chain in `apps/api` [verified]. Everything from P1
-onward — curriculum import, the lesson editor, images, narration, audio,
-publishing, the learner app and commerce — is unbuilt; the tables exist and no
-code reads them. Two documents govern the work and outrank anything inferred
-from code: `knowledge-explorer-spec.md` (the locked product spec) and
-`specs/p0-foundation/`.
+deny-by-default guard chain in `apps/api` [verified]. P1 (curriculum import), P2 (the lesson
+editor and block parser) and P3 (images) are complete [verified]. Everything
+from P4 onward — narration, audio, publishing, the learner app and commerce —
+is unbuilt; those tables exist and no code reads them. Two documents govern the work and outrank anything inferred
+from code: `knowledge-explorer-spec.md` (the locked product spec) and the
+per-phase `specs/` directories.
 
 ## Contents
 
@@ -51,9 +55,13 @@ runtime and workspace tool — are now `[verified]` facts. What remains:
   for the responsibilities §11 assigns them** `[assumed]` — basis: their names
   match §11's descriptions exactly, and each contains a 0-byte `src/index.ts`
   [verified]. Nothing in code states their intended contents.
-- **PostgreSQL 16 and Redis 7 are the production targets** `[assumed]` — basis:
-  `docker-compose.yml` and `.github/workflows/ci.yml` both pin those majors
-  [verified]. No production environment configuration exists.
+- **PostgreSQL 16, Redis 7 and MinIO are the production targets** `[assumed]` —
+  basis: `docker-compose.yml` pins all three and `.github/workflows/ci.yml`
+  provides the first two as services and MinIO as an explicit `docker run` step
+  [verified]. No production environment configuration exists. MinIO comes from
+  quay.io because Docker Hub denies `minio/minio` to unauthenticated clients
+  [verified], and it cannot be a GitHub Actions service container because that
+  syntax cannot supply the `server /data` command [verified].
 - **Test files are placed in a per-workspace `test/` directory** `[assumed]` —
   basis: all nine test files follow it [verified], but no lint rule or config
   enforces it.
@@ -84,10 +92,10 @@ runtime and workspace tool — are now `[verified]` facts. What remains:
 
 **Unknown — specification gaps that will block later phases**
 
-- `generation_jobs.job_status` has no allowed values. The column exists with
-  default `queued` [verified], but §8.1 catalogues no member list for it, so
-  unlike every other enum-like column it has no zod schema. Needs resolving
-  before P3, the first phase to write jobs.
+- ~~`generation_jobs.job_status` has no allowed values.~~ **Resolved by P1**:
+  `queued`, `running`, `succeeded`, `failed`, declared in
+  `packages/shared/src/enums.ts` with a comment recording that §8.1 catalogues
+  no row for it [verified].
 - R-02's scope. §3 phrases it as "courses where they are assigned", but §8
   defines `assigned_admin_id` only on `chapters` and `lessons` and no
   course-level column exists [verified]. Enforcement is row-level by an

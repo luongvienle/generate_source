@@ -47,3 +47,28 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
   if (response.status === 204) return undefined as T;
   return (await response.json()) as T;
 }
+
+/**
+ * Multipart upload, for FR-IMG-02.
+ *
+ * Deliberately does NOT go through apiFetch: that sets a JSON Content-Type, and
+ * a multipart body must be left alone so the browser can add its own boundary.
+ * Everything else — credentials, the error shape — is identical.
+ */
+export async function apiUpload<T>(path: string, form: FormData): Promise<T> {
+  const response = await fetch(`${apiBaseUrl()}${path.startsWith('/api') ? '' : '/api'}${path}`, {
+    method: 'POST',
+    credentials: 'include',
+    body: form,
+  });
+
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+    throw new ApiError({
+      status: response.status,
+      errorCode: typeof body['errorCode'] === 'string' ? body['errorCode'] : undefined,
+    });
+  }
+
+  return (await response.json()) as T;
+}

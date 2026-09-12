@@ -18,12 +18,14 @@ elements are only partly built:
   chain (`auth/`), and injectable services (`prisma/`, `auth/invitation.service.ts`).
   Guards run in a fixed order and each layer narrows the previous one.
 
-- **Ports and adapters** — declared but barely built `[assumed]` as the
-  intent. §11 names five provider interfaces; exactly one exists —
-  `EmailProvider` in `apps/api/src/email/`, with `LogEmailProvider` as its only
-  implementation, bound through a Symbol token [verified]. The other four have
-  no interface and their packages are empty. Do not describe this codebase as
-  hexagonal yet.
+- **Ports and adapters** — now genuinely built for three of the five `[verified]`.
+  §11 names five provider interfaces. `EmailProvider`
+  (`apps/api/src/email/`, logging implementation only) and, from P3,
+  `ImageGenerationProvider` (`packages/ai`, with a real OpenAI adapter and a
+  deterministic fake selected by `IMAGE_PROVIDER`) and `ObjectStorage`
+  (`packages/storage`, MinIO/S3) — all bound through Symbol tokens [verified].
+  `LlmProvider` (P4), `TextToSpeechProvider` (P5) and `PaymentProvider` (P8)
+  still have no interface.
 
 **Not** microservices: the apps share one database and one Prisma schema
 [verified]. **Not** feature-based: `apps/api/src` is organised by technical
@@ -84,9 +86,16 @@ with `health` excluded, port from `API_PORT`, default 3001);
 `apps/worker/src/main.ts` (standalone context, Redis PING, exits);
 `apps/admin-web/app/` and `apps/learner-web/app/` (Next App Router).
 
-**Unbuilt flows.** The §6 content pipeline (block extraction → images →
-narration → audio), the §6.5 checksum chain, the §4.3 draft/published split and
-all of §7's commerce exist only as tables. No code reads or writes them.
+**Unbuilt flows.** Block extraction (§6.1), the checksum head of §6.5 and image
+generation (§6.2) are built. Narration (§6.3), audio (§6.4), the rest of the
+§6.5 staleness chain, the §4.3 draft/published split and all of §7's commerce
+exist only as tables. No code reads or writes them.
+
+**Background jobs** run on BullMQ with two queues: `curriculum-import` (P1) and
+`image-generation` (P3), both consumed by `apps/worker` through
+`withJobLifecycle`, which drives the `generation_jobs` state machine. Image job
+ids are qualified `image:<n>` because BullMQ ids are a per-queue counter
+[verified].
 
 ## Notes
 
