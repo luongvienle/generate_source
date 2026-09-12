@@ -39,6 +39,8 @@ jobs:
       DATABASE_URL: postgresql://knowledge_explorer:knowledge_explorer@localhost:5432/knowledge_explorer
       REDIS_URL: redis://localhost:6379
       AUTH_URL: http://localhost:3000
+      # Where the browser suite reaches apps/api; must match the API's CORS origin.
+      NEXT_PUBLIC_API_URL: http://localhost:3001
       # Test-only value. Real secrets never live in this file.
       AUTH_SECRET: ci-only-secret-not-used-for-any-real-session
 
@@ -59,3 +61,9 @@ jobs:
       # `lint` currently matches no package script and is a no-op; it stays in
       # the sequence so that choosing a linter needs no CI change.
       - run: pnpm exec turbo run typecheck lint test
+
+      # The browser suite is a separate step because its package script is
+      # `test:e2e`, not `test` — `turbo run test` stays runnable without browsers.
+      - run: pnpm --filter @knowledge-explorer/admin-web exec playwright install --with-deps chromium
+
+      - run: pnpm --filter @knowledge-explorer/admin-web run test:e2e
