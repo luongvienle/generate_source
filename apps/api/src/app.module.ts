@@ -11,6 +11,8 @@ import { CategoriesController } from './content/categories.controller';
 import { CoursesController } from './content/courses.controller';
 import { StructureService } from './content/structure.service';
 import { LessonsController } from './content/lessons.controller';
+import { LessonContentController } from './content/lesson-content.controller';
+import { LessonContentService } from './content/lesson-content.service';
 import { InvitationService } from './auth/invitation.service';
 import { AssignmentGuard } from './auth/assignment.guard';
 import { PublishedLockGuard } from './auth/published-lock.guard';
@@ -28,6 +30,7 @@ import { JobStatusService } from './jobs/job-status.service';
     UndeclaredPolicyFixtureController,
     ChaptersController,
     LessonsController,
+    LessonContentController,
     ImportController,
     CategoriesController,
     CoursesController,
@@ -46,6 +49,7 @@ import { JobStatusService } from './jobs/job-status.service';
     AssignmentGuard,
     OwnerFieldGuard,
     StructureService,
+    LessonContentService,
     { provide: EMAIL_PROVIDER, useClass: LogEmailProvider },
   ],
 })

@@ -375,8 +375,8 @@ describe('deny-by-default', () => {
  * that the gate exists at all, which is what removing a @RequirePermission would
  * break and what deny-by-default is meant to catch.
  */
-describe('§3 gate on every route P1 adds', () => {
-  type Method = 'get' | 'post' | 'patch' | 'delete';
+describe('§3 gate on every route P1 and P2 add', () => {
+  type Method = 'get' | 'post' | 'patch' | 'put' | 'delete';
   interface Route {
     readonly name: string;
     readonly method: Method;
@@ -470,6 +470,19 @@ describe('§3 gate on every route P1 adds', () => {
       name: 'GET /my-assignments',
       method: 'get',
       path: () => '/api/admin/my-assignments',
+      allowed: ['owner', 'admin'],
+    },
+    {
+      name: 'GET /lessons/:id/content',
+      method: 'get',
+      path: () => `/api/admin/lessons/${ids.publishedLesson}/content`,
+      allowed: ['owner', 'admin'],
+    },
+    {
+      name: 'PUT /lessons/:id/content',
+      method: 'put',
+      path: () => `/api/admin/lessons/${ids.publishedLesson}/content`,
+      body: () => ({ markdown: '# rbac probe\n' }),
       allowed: ['owner', 'admin'],
     },
   ];
