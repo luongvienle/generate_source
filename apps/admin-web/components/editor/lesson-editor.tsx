@@ -7,6 +7,7 @@ import { LessonBody } from '@knowledge-explorer/content/render';
 import type { FigureImages } from '@knowledge-explorer/content';
 import { ImageDrawer } from './image-drawer';
 import { NarrationTab } from './narration-tab';
+import { AudioTab } from './audio-tab';
 import { figureNumberFromEvent, resolveFigureBlockId } from '../../lib/figure-resolve';
 import { lessonImagesPath, type LessonImagesView } from '../../lib/image-types';
 import { ApiError, apiFetch } from '../../lib/api';
@@ -41,6 +42,8 @@ const MarkdownEditor = dynamic(
 
 const emptyBlockList: BlockList = { blocks: [], nextBlockSeq: 1 };
 
+const tabLabels = { write: 'Write', narration: 'Narration', audio: 'Audio' } as const;
+
 export function LessonEditor({ lessonId, title }: { lessonId: string; title: string }) {
   const [markdown, setMarkdown] = useState('');
   /** The text the server has accepted. Autosave compares against this. */
@@ -59,7 +62,7 @@ export function LessonEditor({ lessonId, title }: { lessonId: string; title: str
   const [drawerBlockId, setDrawerBlockId] = useState<string | null>(null);
   /** A figure clicked while the buffer was dirty, reopened once the save lands. */
   const [pendingFigureNumber, setPendingFigureNumber] = useState<number | null>(null);
-  const [tab, setTab] = useState<'write' | 'narration'>('write');
+  const [tab, setTab] = useState<'write' | 'narration' | 'audio'>('write');
   /**
    * Flush-then-generate, the same two-phase shape the figure path above uses.
    *
@@ -328,7 +331,7 @@ export function LessonEditor({ lessonId, title }: { lessonId: string; title: str
       {!canEdit ? <ReadOnlyBanner reason={readOnlyReason} /> : null}
 
       <nav data-testid="lesson-tabs" className="flex gap-2 border-b border-slate-200">
-        {(['write', 'narration'] as const).map((name) => (
+        {(['write', 'narration', 'audio'] as const).map((name) => (
           <button
             key={name}
             type="button"
@@ -339,13 +342,32 @@ export function LessonEditor({ lessonId, title }: { lessonId: string; title: str
               tab === name ? 'border-b-2 border-slate-800 font-semibold' : 'text-slate-600'
             }`}
           >
-            {name === 'write' ? 'Write' : 'Narration'}
+            {tabLabels[name]}
           </button>
         ))}
       </nav>
 
+      {/*
+        Only ONE tab is mounted at a time, which is what lets narration and audio
+        share `pendingGeneration` without a second state machine: exactly one
+        consumer can ever see 'go'.
+
+        Audio flushes the buffer first for the same reason narration does, even
+        though it generates from the SCRIPT rather than from the buffer — a dirty
+        buffer means the script is about to go stale, and a run started first buys
+        audio the next autosave invalidates.
+      */}
       {tab === 'narration' ? (
         <NarrationTab
+          lessonId={lessonId}
+          canEdit={canEdit}
+          onGenerateRequested={requestGeneration}
+          pendingGeneration={pendingGeneration}
+        />
+      ) : null}
+
+      {tab === 'audio' ? (
+        <AudioTab
           lessonId={lessonId}
           canEdit={canEdit}
           onGenerateRequested={requestGeneration}
