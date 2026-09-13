@@ -21,6 +21,9 @@ export default async function PortalLayout({ children }: { children: ReactNode }
           <Link className="text-sky-700 hover:underline" href="/import">
             Import
           </Link>
+          <Link className="text-sky-700 hover:underline" href="/topic-requests">
+            Topic requests
+          </Link>
         </nav>
         <span className="ml-auto text-slate-500">{session.user.email}</span>
       </header>
