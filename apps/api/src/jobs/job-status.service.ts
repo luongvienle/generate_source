@@ -1,11 +1,17 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { Job } from 'bullmq';
-import type { JobStatus, JobType } from '@knowledge-explorer/shared';
-import { dryRunResultKey, importJobNames } from '@knowledge-explorer/shared';
+import type { Job, Queue } from 'bullmq';
+import type { JobStatus, JobType, QueueDefinition, QueueKey } from '@knowledge-explorer/shared';
+import {
+  dryRunResultKey,
+  importJobNames,
+  prefixedQueueDefinitions,
+  unprefixedQueueDefinition,
+} from '@knowledge-explorer/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { ImportQueue } from './import.queue';
-import { IMAGE_JOB_ID_PREFIX, ImageQueue } from './image.queue';
-import { NARRATION_JOB_ID_PREFIX, NarrationQueue } from './narration.queue';
+import { ImageQueue } from './image.queue';
+import { NarrationQueue } from './narration.queue';
+import { AudioQueue } from './audio.queue';
 
 /**
  * One shape for every kind of job, so the SSE endpoints do not care which they
@@ -51,17 +57,14 @@ export const isTerminal = (snapshot: JobSnapshot): boolean =>
   snapshot.jobStatus === 'unknown';
 
 /**
- * Which queue an id belongs to. A discriminant rather than P3's `isImport`
- * boolean: a third queue made the boolean a lie, and P5's audio queue is the
- * fourth. Widening happens here, in a CONSUMER — no P1 or P3 producer is touched.
+ * Which BullMQ queue instance backs each registry definition.
+ *
+ * PARTIAL ON PURPOSE. The registry in packages/shared declares every queue the
+ * product has; this map holds the ones apps/api actually registered as
+ * providers. A definition with no instance here is skipped rather than throwing,
+ * which is the right answer for a queue this process does not produce to.
  */
-type QueueKind = 'import' | 'image' | 'narration';
-
-const fallbackJobTypes: Record<QueueKind, JobType> = {
-  import: 'import_course_outline',
-  image: 'generate_image',
-  narration: 'generate_narration_script',
-};
+type QueueInstances = Partial<Record<QueueKey, Queue>>;
 
 /** BullMQ's progress is `unknown`; only the shape P4 writes is understood. */
 function readProgress(value: unknown): { done: number; total: number } | null {
@@ -97,40 +100,58 @@ export class JobStatusService {
     @Inject(ImportQueue) private readonly importQueue: ImportQueue,
     @Inject(ImageQueue) private readonly imageQueue: ImageQueue,
     @Inject(NarrationQueue) private readonly narrationQueue: NarrationQueue,
+    @Inject(AudioQueue) private readonly audioQueue: AudioQueue,
     @Inject(PrismaService) private readonly prisma: PrismaService,
   ) {}
 
+  private instances(): QueueInstances {
+    return {
+      import: this.importQueue.queue,
+      image: this.imageQueue.queue,
+      narration: this.narrationQueue.queue,
+      audio: this.audioQueue.queue,
+    };
+  }
+
   /**
-   * Resolves a qualified or unqualified job id to its job and its queue.
+   * Resolves a qualified or unqualified job id to its job and its definition.
    *
-   * Unprefixed ids belong to the import queue, which is the format P1 minted
-   * and its screens still hold. Anything prefixed `image:` is looked up in the
-   * image queue — see ImageQueue.enqueueGenerate for why ids are qualified.
+   * ORDER IS LOAD-BEARING. The import queue's prefix is the empty string —
+   * P1 minted unprefixed ids and its screens still hold them — and
+   * `'anything'.startsWith('')` is always true. Checking the prefixed
+   * definitions FIRST and falling through to the unprefixed one last is what
+   * keeps `image:7` from resolving to import job `image:7`. The registry splits
+   * the two lists so this cannot be got wrong by reordering a literal.
    */
-  private async locate(jobId: string): Promise<{ job: Job; queue: QueueKind } | undefined> {
-    for (const [prefix, queue, kind] of [
-      [IMAGE_JOB_ID_PREFIX, this.imageQueue.queue, 'image'],
-      [NARRATION_JOB_ID_PREFIX, this.narrationQueue.queue, 'narration'],
-    ] as const) {
-      if (jobId.startsWith(prefix)) {
-        const job = await queue.getJob(jobId.slice(prefix.length));
-        return job ? { job, queue: kind } : undefined;
-      }
+  private async locate(
+    jobId: string,
+  ): Promise<{ job: Job; definition: QueueDefinition } | undefined> {
+    const instances = this.instances();
+
+    for (const definition of prefixedQueueDefinitions) {
+      const queue = instances[definition.key];
+      if (!queue || !jobId.startsWith(definition.idPrefix)) continue;
+
+      const job = await queue.getJob(jobId.slice(definition.idPrefix.length));
+      return job ? { job, definition } : undefined;
     }
 
-    const job = await this.importQueue.queue.getJob(jobId);
-    return job ? { job, queue: 'import' } : undefined;
+    const fallback = instances[unprefixedQueueDefinition.key];
+    if (!fallback) return undefined;
+
+    const job = await fallback.getJob(jobId);
+    return job ? { job, definition: unprefixedQueueDefinition } : undefined;
   }
 
   async snapshot(jobId: string): Promise<JobSnapshot | undefined> {
     const located = await this.locate(jobId);
     if (!located) return undefined;
 
-    const { job, queue } = located;
+    const { job, definition } = located;
     const bullStatus = fromBullState(await job.getState());
     const progress = readProgress(job.progress);
 
-    if (queue === 'import' && job.name === importJobNames.dryRun) {
+    if (definition.key === 'import' && job.name === importJobNames.dryRun) {
       const cached = await this.importQueue.readKey(dryRunResultKey(job.id as string));
       return {
         jobId,
@@ -153,7 +174,7 @@ export class JobStatusService {
 
     return {
       jobId,
-      jobType: (row?.jobType as JobType | undefined) ?? fallbackJobTypes[queue],
+      jobType: (row?.jobType as JobType | undefined) ?? definition.fallbackJobType,
       jobStatus: (row?.jobStatus as JobStatus | undefined) ?? bullStatus,
       attemptCount: row?.attemptCount ?? job.attemptsMade,
       startedAt: row?.startedAt?.toISOString() ?? null,

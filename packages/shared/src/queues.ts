@@ -1,3 +1,5 @@
+import type { JobType } from './enums';
+
 /**
  * BullMQ queue and job names, single-sourced so the producer in apps/api and the
  * consumer in apps/worker cannot drift apart.
@@ -62,10 +64,8 @@ export function parseRedisUrl(url: string): RedisConnectionOptions {
  * The image generation queue (P3): the second producer on the substrate P1
  * built, and the first one that spends money per job.
  *
- * A sibling of the import queue rather than a generalised factory. Two
- * instances is not enough evidence for an abstraction; P5's audio queue is the
- * third, and the shared shape will be obvious then. What genuinely must not
- * drift — attempts, backoff, queue names — already lives in this file.
+ * Its shared shape now lives in `queueDefinitions` at the foot of this file —
+ * see the note there for what was extracted at P5 and what deliberately was not.
  */
 export const IMAGE_QUEUE_NAME = 'image-generation';
 
@@ -95,18 +95,7 @@ export interface GenerateImageJobData {
 /**
  * The narration script queue (P4): the THIRD producer on the substrate P1 built.
  *
- * The note on IMAGE_QUEUE_NAME above predicted the shared shape would be obvious
- * at the third queue and named P5's audio queue as that third. Narration arrived
- * first. The extraction was reconsidered here and DEFERRED AGAIN, deliberately:
- * the three producers differ in more than their names — import carries two job
- * names and a Redis-cached result, image retains nothing and qualifies its ids,
- * narration holds a database-level in-flight lock — and a factory over three
- * shapes that disagree would be parameterised until it was longer than the three
- * siblings it replaced. P5's audio queue is the fourth and the closest sibling of
- * image; that is the moment to extract, not this one.
- *
- * What genuinely must not drift — attempts, backoff, queue names, payload types —
- * already lives in this file, which is what the pattern is actually protecting.
+ * Its shared shape now lives in `queueDefinitions` at the foot of this file.
  */
 export const NARRATION_QUEUE_NAME = 'narration-script';
 
@@ -150,3 +139,142 @@ export const NARRATION_CHUNK_MAX_TRIES = 3;
  * where refusing is the honest answer and §4.1 wants smaller lessons anyway.
  */
 export const NARRATION_RUN_MAX_CALLS = 40;
+
+/**
+ * The audio queue (P5): the FOURTH producer, and the closest sibling of image.
+ */
+export const AUDIO_QUEUE_NAME = 'audio-synthesis';
+
+export const audioJobNames = {
+  generate: 'generate',
+} as const;
+
+export type AudioJobName = (typeof audioJobNames)[keyof typeof audioJobNames];
+
+/**
+ * What a generate_audio job carries.
+ *
+ * THE VOICE TRAVELS WITH THE JOB. FR-AUDIO-03 gives a course one configured
+ * voice, and it is resolved once at enqueue rather than re-read in the worker,
+ * so a retry — or an owner changing the course voice mid-run — cannot produce a
+ * lesson synthesized half in one voice and half in another. The segments are
+ * read from the stored narration script, which the worker re-reads for the
+ * reason P4 records: a script is unbounded where a voice identifier is small.
+ */
+export interface GenerateAudioJobData {
+  readonly generationJobId: string;
+  readonly lessonId: string;
+  readonly voiceIdentifier: string;
+  readonly voiceProviderName: string;
+  readonly createdByUserId: string;
+}
+
+/**
+ * NFR-03 bounds concurrency, and P5 is where that bites hardest: a narration run
+ * is a handful of calls for a whole lesson, but an audio run is ONE PAID CALL PER
+ * SEGMENT. Four in flight keeps a forty-block lesson moving without turning a
+ * single admin click into forty simultaneous requests against a rate limit.
+ */
+export const AUDIO_SEGMENT_CONCURRENCY = 4;
+
+/**
+ * Whole-run ceiling on segments, refused at precondition time.
+ *
+ * Also the memory bound on the merge, which holds every segment's decoded PCM at
+ * once: 200 segments of ten seconds at 24 kHz mono is under 100 MB, which is why
+ * capping the run is the answer rather than streaming the concatenation.
+ */
+export const AUDIO_RUN_MAX_SEGMENTS = 200;
+
+/**
+ * The four queues as data — the extraction the two notes above used to promise.
+ *
+ * WHAT WAS EXTRACTED, AND WHY ONLY THIS. P3's note predicted a shared shape at
+ * the third queue; P4's deferred it again and named P5's audio queue as the
+ * moment. P5 is that moment, and this is the whole of it: the parts that must
+ * not drift between a producer in apps/api and a consumer in apps/worker — the
+ * queue name, its environment override, the job-id prefix, how long finished
+ * jobs are retained, and which §8.1 job_type an id falls back to.
+ *
+ * WHAT WAS NOT, and deliberately. The producers keep their own classes. They
+ * still differ in more than their names — import carries two job names, a
+ * Redis-cached dry-run result and no id prefix; image composes its prompt at
+ * enqueue; narration and audio each hold a database-level in-flight lock, and
+ * audio resolves a voice. A factory over four shapes that disagree would be
+ * parameterised until it was longer than the four siblings it replaced. What
+ * they share is construction and job options, and `BaseJobQueue` in
+ * apps/api/src/jobs owns exactly that.
+ *
+ * ORDER IS LOAD-BEARING FOR CONSUMERS. The import queue's prefix is the empty
+ * string, because P1 minted unprefixed ids and screens it shipped still hold
+ * them — and `'anything'.startsWith('')` is always true. Anything resolving an
+ * id must try the non-empty prefixes first and fall through to the empty one
+ * last; `prefixedQueueDefinitions` and `unprefixedQueueDefinition` below exist
+ * so no caller has to remember that.
+ */
+export type QueueKey = 'import' | 'image' | 'narration' | 'audio';
+
+export interface QueueDefinition {
+  readonly key: QueueKey;
+  /** The default BullMQ queue name. */
+  readonly name: string;
+  /** Environment variable that overrides `name`, so a test can isolate a queue. */
+  readonly envVar: string;
+  /** Prepended to a BullMQ id to disambiguate it across queues. `''` for import. */
+  readonly idPrefix: string;
+  /** How long a finished job is retained, so a late subscriber still sees its terminal event. */
+  readonly retentionSeconds: number;
+  /** The §8.1 job_type to report when no generation_jobs row is found. */
+  readonly fallbackJobType: JobType;
+}
+
+export const queueDefinitions: Readonly<Record<QueueKey, QueueDefinition>> = {
+  import: {
+    key: 'import',
+    name: IMPORT_QUEUE_NAME,
+    envVar: 'IMPORT_QUEUE_NAME',
+    // Unprefixed, permanently: P1's screens hold ids in this format.
+    idPrefix: '',
+    // FR-IMP-02: a dry run's result lives in Redis for this long, and the job
+    // must outlive it or the result outlives the job that explains it.
+    retentionSeconds: DRY_RUN_RESULT_TTL_SECONDS,
+    fallbackJobType: 'import_course_outline',
+  },
+  image: {
+    key: 'image',
+    name: IMAGE_QUEUE_NAME,
+    envVar: 'IMAGE_QUEUE_NAME',
+    idPrefix: 'image:',
+    retentionSeconds: 3_600,
+    fallbackJobType: 'generate_image',
+  },
+  narration: {
+    key: 'narration',
+    name: NARRATION_QUEUE_NAME,
+    envVar: 'NARRATION_QUEUE_NAME',
+    idPrefix: 'script:',
+    retentionSeconds: 3_600,
+    fallbackJobType: 'generate_narration_script',
+  },
+  audio: {
+    key: 'audio',
+    name: AUDIO_QUEUE_NAME,
+    envVar: 'AUDIO_QUEUE_NAME',
+    idPrefix: 'audio:',
+    retentionSeconds: 3_600,
+    fallbackJobType: 'generate_audio',
+  },
+} as const;
+
+/** Every definition that qualifies its ids. Try these FIRST when resolving an id. */
+export const prefixedQueueDefinitions: readonly QueueDefinition[] = Object.values(
+  queueDefinitions,
+).filter((definition) => definition.idPrefix !== '');
+
+/**
+ * The one definition whose ids carry no prefix, and therefore the fallback.
+ *
+ * Exactly one queue may be unprefixed; a second would make an unprefixed id
+ * ambiguous with no way to tell. Asserted in test/queues.spec.ts.
+ */
+export const unprefixedQueueDefinition: QueueDefinition = queueDefinitions.import;

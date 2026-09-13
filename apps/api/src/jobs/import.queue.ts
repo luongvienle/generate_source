@@ -1,14 +1,6 @@
-import { Inject, Injectable, Logger, type OnModuleDestroy } from '@nestjs/common';
-import { Queue } from 'bullmq';
-import {
-  IMPORT_QUEUE_NAME,
-  parseRedisUrl,
-  JOB_BACKOFF_DELAY_MS,
-  JOB_MAX_ATTEMPTS,
-  DRY_RUN_RESULT_TTL_SECONDS,
-  importJobNames,
-  type ImportJobName,
-} from '@knowledge-explorer/shared';
+import { Inject, Injectable } from '@nestjs/common';
+import { importJobNames, queueDefinitions, type ImportJobName } from '@knowledge-explorer/shared';
+import { BaseJobQueue } from './base.queue';
 
 export const REDIS_URL = Symbol('RedisUrl');
 
@@ -16,37 +8,22 @@ export const REDIS_URL = Symbol('RedisUrl');
  * The producer side of the curriculum import queue.
  *
  * NFR-04 forbids an HTTP request waiting on long-running work, so both import
- * endpoints enqueue and return 202. NFR-03's retry policy is set here as the
- * queue default rather than per call site, so no endpoint can enqueue work that
+ * endpoints enqueue and return 202. NFR-03's retry policy is a queue default set
+ * by BaseJobQueue rather than per call site, so no endpoint can enqueue work that
  * retries forever.
+ *
+ * ITS IDS ARE UNPREFIXED, permanently. P1 minted them that way and screens it
+ * shipped still hold them, so `queueDefinitions.import.idPrefix` is `''` and
+ * `enqueue` returns exactly what it always returned.
  */
 @Injectable()
-export class ImportQueue implements OnModuleDestroy {
-  private readonly logger = new Logger(ImportQueue.name);
-  readonly queue: Queue;
-
-  constructor(
-    @Inject(REDIS_URL) url: string,
-    queueName: string = process.env['IMPORT_QUEUE_NAME'] ?? IMPORT_QUEUE_NAME,
-  ) {
-    this.queue = new Queue(queueName, {
-      connection: parseRedisUrl(url),
-      defaultJobOptions: {
-        attempts: JOB_MAX_ATTEMPTS,
-        backoff: { type: 'exponential', delay: JOB_BACKOFF_DELAY_MS },
-        // Retaining finished jobs for the dry-run TTL is what lets a client that
-        // subscribes after a job ends still receive its terminal event.
-        removeOnComplete: { age: DRY_RUN_RESULT_TTL_SECONDS },
-        removeOnFail: { age: DRY_RUN_RESULT_TTL_SECONDS },
-      },
-    });
+export class ImportQueue extends BaseJobQueue {
+  constructor(@Inject(REDIS_URL) url: string, queueName?: string) {
+    super(url, queueDefinitions.import, queueName);
   }
 
-  async enqueue(name: ImportJobName, data: unknown): Promise<string> {
-    const job = await this.queue.add(name, data);
-    if (!job.id) throw new Error('BullMQ returned a job with no id');
-    this.logger.log(`Enqueued ${name} as job ${job.id}`);
-    return job.id;
+  enqueue(name: ImportJobName, data: unknown): Promise<string> {
+    return this.add(name, data);
   }
 
   enqueueDryRun(data: unknown): Promise<string> {
@@ -62,13 +39,12 @@ export class ImportQueue implements OnModuleDestroy {
    * connection rather than opening a second one. apps/api therefore needs no
    * direct ioredis dependency, which also keeps it clear of the ioredis 5/6 split
    * between BullMQ and apps/worker.
+   *
+   * This, and the two job names above, are why the producers were NOT collapsed
+   * into one class at P5: no other queue has anything like it.
    */
   async readKey(key: string): Promise<string | null> {
     const client = await this.queue.client;
     return client.get(key);
-  }
-
-  async onModuleDestroy(): Promise<void> {
-    await this.queue.close();
   }
 }

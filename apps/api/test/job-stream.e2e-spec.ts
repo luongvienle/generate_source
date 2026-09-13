@@ -15,6 +15,7 @@ import {
 import { AppModule } from '../src/app.module';
 import { ImportQueue, REDIS_URL } from '../src/jobs/import.queue';
 import { ImageQueue } from '../src/jobs/image.queue';
+import { JobStatusService } from '../src/jobs/job-status.service';
 import { createQueuedJob, markJobRunning, markJobSucceeded } from '@knowledge-explorer/database';
 
 loadEnv({ path: ['../../.env', '.env'] });
@@ -406,5 +407,56 @@ describe('the per-course job stream', () => {
 
     expect(response.status).toBe(403);
     expect(response.body.errorCode).toBe(errorCodes.FORBIDDEN_ROLE);
+  });
+});
+
+/**
+ * P5 extracted the four queues into `queueDefinitions` and re-pointed
+ * JobStatusService at it. These cases pin the property that extraction could
+ * silently break: the import queue's prefix is the EMPTY STRING, and
+ * `'anything'.startsWith('')` is always true, so a resolver that checked the
+ * definitions in registry order would route every id to import.
+ *
+ * Asserted against the service directly rather than through the SSE endpoint,
+ * because what is under test is `locate`, not the stream the other blocks cover.
+ */
+describe('job id resolution across four queues', () => {
+  it('resolves an UNPREFIXED id to the import queue, the format P1 shipped', async () => {
+    const jobId = await importQueue.enqueueCommit({ marker: queueName });
+
+    expect(jobId).not.toContain(':');
+    expect(jobId).toMatch(/^\d+$/);
+
+    const snapshot = await app.get(JobStatusService).snapshot(jobId);
+    expect(snapshot?.jobType).toBe('import_course_outline');
+  });
+
+  it('resolves an `image:` id to the image queue and not to import', async () => {
+    const jobId = await imageQueue.enqueueGenerate({
+      generationJobId: '',
+      lessonId: '',
+      blockReferenceId: 'b1',
+      composedPrompt: 'x',
+      candidateCount: 1,
+      createdByUserId: '',
+    });
+
+    expect(jobId).toMatch(/^image:\d+$/);
+
+    const snapshot = await app.get(JobStatusService).snapshot(jobId);
+    expect(snapshot?.jobType).toBe('generate_image');
+  });
+
+  it('does not fall through to import when a prefixed id has no job', async () => {
+    // The regression the empty prefix invites: without prefix-first ordering,
+    // this would be looked up in the import queue under the literal key
+    // "image:999999" — and on a queue that happened to hold it, answered.
+    expect(await app.get(JobStatusService).snapshot('image:999999')).toBeUndefined();
+    expect(await app.get(JobStatusService).snapshot('script:999999')).toBeUndefined();
+    expect(await app.get(JobStatusService).snapshot('audio:999999')).toBeUndefined();
+  });
+
+  it('reports an unknown unprefixed id as absent rather than throwing', async () => {
+    expect(await app.get(JobStatusService).snapshot('999999')).toBeUndefined();
   });
 });
