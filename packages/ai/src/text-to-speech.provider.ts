@@ -68,3 +68,30 @@ export const TEXT_TO_SPEECH_PROVIDER = Symbol('TextToSpeechProvider');
  * the offsets P7's highlight sync depends on. See apps/worker/src/audio/ffmpeg.ts.
  */
 export const AUDIO_CONTENT_TYPE = 'audio/mpeg';
+
+/**
+ * FR-AUDIO-03: the voice a course narrates in, with the install default.
+ *
+ * NULL on the course means "use the install default", which is why §8's two
+ * columns are nullable — "use the default" and "leave it alone" are different
+ * requests and a PATCH must express both.
+ *
+ * Here rather than in apps/api since P6. The publish worker re-checks §6.5
+ * staleness before writing the published track, and audio is stale when the
+ * course's configured voice has moved on — so the worker needs this exact
+ * resolution, and apps/worker never imports apps/api. The API's private copy was
+ * a duplicate of `DEFAULT_OPENAI_VOICE` and is now this function.
+ */
+export function resolveCourseVoice(
+  course: { voiceIdentifier: string | null; voiceProviderName: string | null },
+  env: NodeJS.ProcessEnv = process.env,
+): { voiceIdentifier: string; voiceProviderName: string } {
+  return {
+    voiceIdentifier: course.voiceIdentifier ?? env['TTS_DEFAULT_VOICE'] ?? DEFAULT_VOICE_IDENTIFIER,
+    voiceProviderName: course.voiceProviderName ?? DEFAULT_VOICE_PROVIDER,
+  };
+}
+
+/** Kept beside the resolver so the two cannot drift; mirrors packages/ai's OpenAI default. */
+export const DEFAULT_VOICE_IDENTIFIER = 'alloy';
+export const DEFAULT_VOICE_PROVIDER = 'openai';

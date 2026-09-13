@@ -8,16 +8,22 @@ import {
   UnprocessableEntityException,
 } from '@nestjs/common';
 import { createQueuedJob, markJobAttemptFailed } from '@knowledge-explorer/database';
-import { readScriptSegments, type NarrationSegment } from '@knowledge-explorer/content';
+import {
+  computeAudioStatus,
+  readScriptSegments,
+  type ComputedAudioStatus,
+  type NarrationSegment,
+} from '@knowledge-explorer/content';
 import {
   AUDIO_RUN_MAX_SEGMENTS,
   errorCodes,
-  type AudioStatus,
   type GenerateAudioJobData,
 } from '@knowledge-explorer/shared';
 import {
+  DEFAULT_VOICE_PROVIDER,
   OPENAI_TTS_VOICES,
   TEXT_TO_SPEECH_PROVIDER,
+  resolveCourseVoice,
   type TextToSpeechProvider,
 } from '@knowledge-explorer/ai';
 import { OBJECT_STORAGE, type ObjectStorage } from '@knowledge-explorer/storage';
@@ -40,8 +46,14 @@ import { readBlockList, resolveEditability, type Editor } from './lesson-content
  *   regeneration that fails never replaces working audio with a partial set.
  */
 
-/** The computed status. `stale` exists here and never in the database. */
-export type ComputedAudioStatus = AudioStatus | null;
+/**
+ * The computed status. `stale` exists here and never in the database.
+ *
+ * Re-exported from packages/content since P6 — see the note on
+ * `computeAudioStatus` there. apps/worker needs the same rule for the publish
+ * re-check and cannot import apps/api.
+ */
+export type { ComputedAudioStatus };
 
 export interface AudioRowView {
   readonly blockId: string;
@@ -108,11 +120,9 @@ export class AudioService {
     voiceIdentifier: string;
     voiceProviderName: string;
   } {
-    return {
-      voiceIdentifier:
-        course.voiceIdentifier ?? process.env['TTS_DEFAULT_VOICE'] ?? DEFAULT_VOICE_IDENTIFIER,
-      voiceProviderName: course.voiceProviderName ?? DEFAULT_VOICE_PROVIDER,
-    };
+    // In packages/ai since P6: the publish worker needs the identical
+    // resolution for its §6.5 re-check and cannot import this app.
+    return resolveCourseVoice(course);
   }
 
   /**
@@ -496,35 +506,15 @@ export class AudioService {
   }
 }
 
-/** Falls back to the adapter's own default rather than inventing a second one. */
-const DEFAULT_VOICE_IDENTIFIER = 'alloy';
-const DEFAULT_VOICE_PROVIDER = 'openai';
-
 const isKnownVoice = (value: string): boolean =>
   (OPENAI_TTS_VOICES as readonly string[]).includes(value);
 
 /**
- * §6.5 computed on read, never stored.
- *
- * `stale` when a stored `ready` no longer matches the script's current checksum —
- * OR when the course's configured voice has moved on. The voice clause is what
- * FR-AUDIO-03's "stored with each audio row so a voice change is detectable" is
- * FOR; detection with no consequence would be a column nobody reads. `failed`
- * outranks `stale`, because a failed run is the more actionable fact.
+ * §6.5's script→audio link, re-exported so this module's callers keep the name
+ * they had. The rule and its reasoning moved to packages/content at P6, where
+ * the publish checklist and the publish worker can reach it too.
  */
-function computeAudioStatus(
-  audio: { audioStatus: string; sourceScriptChecksum: string; voiceIdentifier: string },
-  currentScriptChecksum: string | null,
-  configuredVoiceIdentifier: string,
-): ComputedAudioStatus {
-  if (audio.audioStatus !== 'ready') return audio.audioStatus as AudioStatus;
-
-  const scriptMoved =
-    currentScriptChecksum !== null && audio.sourceScriptChecksum !== currentScriptChecksum;
-  const voiceMoved = audio.voiceIdentifier !== configuredVoiceIdentifier;
-
-  return scriptMoved || voiceMoved ? 'stale' : 'ready';
-}
+export { computeAudioStatus };
 
 /**
  * Why the tab should disable Generate, as the errorCode the write would give.

@@ -3,6 +3,7 @@ import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 import { normalizeBlockText } from './block-identity';
 import { blockChecksum, canonicalJson } from './checksum';
+import type { AudioStatus, ScriptStatus } from '@knowledge-explorer/shared';
 import type { Block } from './types';
 
 /**
@@ -298,4 +299,63 @@ export function reconcileSegments(input: {
       .filter((segment) => !blockIds.has(segment.blockId))
       .map((segment) => segment.blockId),
   };
+}
+
+/**
+ * §6.5 computed statuses — `stale` exists here and NEVER in the database.
+ *
+ * These two functions are the whole of §6.5's second and third links. They lived
+ * in apps/api's narration and audio services until P6, which needed them in two
+ * places at once: the API serves them on read, and the publish worker re-checks
+ * them before writing the published track. apps/api and apps/worker never import
+ * each other, so the rule moved to the package both already depend on — beside
+ * `narrationStaleness`, which is the first link and was always here.
+ *
+ * They are pure functions over plain rows, which is what lets the publish
+ * checklist evaluate a whole course from batch-loaded data rather than calling a
+ * per-lesson service method forty times.
+ */
+
+export type ComputedScriptStatus = ScriptStatus | null;
+export type ComputedAudioStatus = AudioStatus | null;
+
+/**
+ * §6.5: a script is stale when its source checksum differs from the lesson's
+ * current content checksum.
+ *
+ * `failed` OUTRANKS `stale` — a failed row is not `ready`, and the failure is the
+ * more actionable fact. That falls out of only promoting `ready`, rather than
+ * being a special case.
+ */
+export function computeScriptStatus(
+  stored: string | null,
+  sourceContentChecksum: string | null,
+  contentChecksum: string | null,
+): ComputedScriptStatus {
+  if (stored === null) return null;
+  if (stored !== 'ready') return stored as ScriptStatus;
+  return sourceContentChecksum === contentChecksum ? 'ready' : 'stale';
+}
+
+/**
+ * §6.5's script→audio link.
+ *
+ * `stale` when a stored `ready` no longer matches the script's current checksum —
+ * OR when the course's configured voice has moved on. The voice clause is what
+ * FR-AUDIO-03's "stored with each audio row so a voice change is detectable" is
+ * FOR; detection with no consequence would be a column nobody reads. `failed`
+ * outranks `stale`, because a failed run is the more actionable fact.
+ */
+export function computeAudioStatus(
+  audio: { audioStatus: string; sourceScriptChecksum: string; voiceIdentifier: string },
+  currentScriptChecksum: string | null,
+  configuredVoiceIdentifier: string,
+): ComputedAudioStatus {
+  if (audio.audioStatus !== 'ready') return audio.audioStatus as AudioStatus;
+
+  const scriptMoved =
+    currentScriptChecksum !== null && audio.sourceScriptChecksum !== currentScriptChecksum;
+  const voiceMoved = audio.voiceIdentifier !== configuredVoiceIdentifier;
+
+  return scriptMoved || voiceMoved ? 'stale' : 'ready';
 }

@@ -8,11 +8,13 @@ import {
   UnprocessableEntityException,
 } from '@nestjs/common';
 import {
+  computeScriptStatus,
   narrationStaleness,
   readScriptSegments,
   scriptChecksum,
   segmentChecksum,
   type Block,
+  type ComputedScriptStatus,
   type IncompleteFigure,
   type NarrationSegment,
   type NarrationStaleness,
@@ -23,7 +25,6 @@ import {
   NARRATION_RUN_MAX_CALLS,
   errorCodes,
   type GenerateNarrationScriptJobData,
-  type ScriptStatus,
 } from '@knowledge-explorer/shared';
 import { worstCaseCallCount } from '@knowledge-explorer/ai';
 import { createQueuedJob, markJobAttemptFailed } from '@knowledge-explorer/database';
@@ -46,8 +47,14 @@ import { readBlockList, resolveEditability, type Editor } from './lesson-content
  *   never replaces an admin's reviewed script with a half-written one.
  */
 
-/** The computed status. `stale` exists here and never in the database. */
-export type ComputedScriptStatus = ScriptStatus | null;
+/**
+ * The computed status. `stale` exists here and never in the database.
+ *
+ * Re-exported from packages/content since P6: the publish worker needs the same
+ * rule and apps/worker cannot import apps/api. The definition moved; the name
+ * this module exports did not.
+ */
+export type { ComputedScriptStatus };
 
 export interface NarrationRowView {
   readonly blockId: string;
@@ -116,23 +123,8 @@ interface ScriptRow {
   reviewedAt: Date | null;
 }
 
-/**
- * §6.5: a script is stale when its source checksum differs from the lesson's
- * current content checksum.
- *
- * `failed` OUTRANKS `stale` — a failed row is not `ready`, and the failure is the
- * more actionable fact. That falls out of only promoting `ready`, rather than
- * being a special case.
- */
-export function computeStatus(
-  stored: string | null,
-  sourceContentChecksum: string | null,
-  contentChecksum: string | null,
-): ComputedScriptStatus {
-  if (stored === null) return null;
-  if (stored !== 'ready') return stored as ScriptStatus;
-  return sourceContentChecksum === contentChecksum ? 'ready' : 'stale';
-}
+/** §6.5's content→script link, now in packages/content. See the note above. */
+export { computeScriptStatus as computeStatus };
 
 @Injectable()
 export class NarrationService {
@@ -225,7 +217,7 @@ export class NarrationService {
 
     return {
       lessonId,
-      status: computeStatus(
+      status: computeScriptStatus(
         script?.scriptStatus ?? null,
         script?.sourceContentChecksum ?? null,
         contentChecksum,
@@ -272,7 +264,7 @@ export class NarrationService {
       contentChecksum,
       script: {
         ...narrationStaleness(blocks, envelope.segments),
-        status: computeStatus(script.scriptStatus, script.sourceContentChecksum, contentChecksum),
+        status: computeScriptStatus(script.scriptStatus, script.sourceContentChecksum, contentChecksum),
         sourceContentChecksum: script.sourceContentChecksum,
         scriptChecksum: script.scriptChecksum,
       },
@@ -462,7 +454,7 @@ export class NarrationService {
 
     if (changes.approve === true) {
       const { contentChecksum } = await this.loadContent(lessonId);
-      const status = computeStatus(script.scriptStatus, script.sourceContentChecksum, contentChecksum);
+      const status = computeScriptStatus(script.scriptStatus, script.sourceContentChecksum, contentChecksum);
       // Approving a stale script records a review of text the lesson no longer
       // says. An edit does not move this: it touches neither checksum.
       if (status !== 'ready') {
