@@ -46,6 +46,11 @@ import { PublicMediaController } from './public/media.controller';
 import { PublicMeController } from './public/me.controller';
 import { ProgressService } from './public/progress.service';
 import { ReaderService } from './public/reader.service';
+import { PublicTopicRequestsController } from './public/topic-requests.controller';
+import { TopicRequestsLearnerController } from './public/topic-requests-learner.controller';
+import { TopicRequestsService } from './public/topic-requests.service';
+import { TopicRequestsAdminController } from './topic-requests/topic-requests-admin.controller';
+import { TopicRequestsAdminService } from './topic-requests/topic-requests-admin.service';
 
 @Module({
   controllers: [
@@ -74,6 +79,16 @@ import { ReaderService } from './public/reader.service';
     PublicLessonsController,
     PublicMediaController,
     PublicMeController,
+    /**
+     * FR-REQ-01's board. Same treatment, same reason: PublicTopicRequestsController
+     * carries no guard and no permission because §9.4's read surface is
+     * anonymous, and topic-requests.e2e-spec.ts asserts that absence by name.
+     * Its learner-authenticated twin is a separate class so a class-level guard
+     * cannot reach the board.
+     */
+    PublicTopicRequestsController,
+    TopicRequestsLearnerController,
+    TopicRequestsAdminController,
   ],
   providers: [
     PrismaService,
@@ -102,6 +117,8 @@ import { ReaderService } from './public/reader.service';
     ReaderService,
     CatalogService,
     ProgressService,
+    TopicRequestsService,
+    TopicRequestsAdminService,
     { provide: OBJECT_STORAGE, useFactory: () => new S3ObjectStorage(s3ConfigFromEnv()) },
     { provide: EMAIL_PROVIDER, useClass: LogEmailProvider },
     /**

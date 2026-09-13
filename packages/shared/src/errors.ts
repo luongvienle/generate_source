@@ -108,6 +108,34 @@ export const errorCodes = {
    * does not exist — a draft course's slug is not public information.
    */
   COURSE_NOT_PUBLISHED: 'COURSE_NOT_PUBLISHED',
+  /** §9.4: no topic_requests row with this id — or one the caller may not act on. */
+  TOPIC_REQUEST_NOT_FOUND: 'TOPIC_REQUEST_NOT_FOUND',
+  /**
+   * FR-REQ-01: the request has been reviewed, so it accepts no more votes and
+   * cannot be withdrawn. Once the owner has ruled, the count is the record of
+   * the demand that produced the decision and must stop moving.
+   */
+  TOPIC_REQUEST_NOT_PENDING: 'TOPIC_REQUEST_NOT_PENDING',
+  /**
+   * FR-REQ-01: a learner may not upvote their own request. The count is what the
+   * owner reads as demand from OTHER people; self-votes make every floor 1 and
+   * measure nothing.
+   */
+  TOPIC_REQUEST_OWN: 'TOPIC_REQUEST_OWN',
+  /**
+   * The caller already holds TOPIC_REQUEST_PENDING_CAP unreviewed requests. An
+   * abuse brake, not an invariant — the 409 carries the cap and the current
+   * count so the form can say what happened.
+   */
+  TOPIC_REQUEST_LIMIT_REACHED: 'TOPIC_REQUEST_LIMIT_REACHED',
+  /** §9.2: rejecting a request requires the owner to say why. */
+  TOPIC_REQUEST_NOTE_REQUIRED: 'TOPIC_REQUEST_NOTE_REQUIRED',
+  /** §9.2: `duplicated` without naming what it duplicates writes a dangling status. */
+  TOPIC_REQUEST_DUPLICATE_TARGET_REQUIRED: 'TOPIC_REQUEST_DUPLICATE_TARGET_REQUIRED',
+  /** §9.2: the duplicate target is unknown, is the request itself, or is itself a duplicate. */
+  TOPIC_REQUEST_DUPLICATE_TARGET_INVALID: 'TOPIC_REQUEST_DUPLICATE_TARGET_INVALID',
+  /** §9.2: `linkedCourseId` names no course. */
+  TOPIC_REQUEST_LINKED_COURSE_NOT_FOUND: 'TOPIC_REQUEST_LINKED_COURSE_NOT_FOUND',
 } as const;
 
 export type ErrorCode = (typeof errorCodes)[keyof typeof errorCodes];
