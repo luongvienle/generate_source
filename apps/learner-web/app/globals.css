@@ -1,0 +1,49 @@
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
+
+/*
+ * NFR-09: "The learner app is responsive from 360 px."
+ *
+ * That is the opposite constraint to admin-web's 1280 px floor, so this file
+ * sets a fluid reading column rather than a clamped portal shell. The gutter is
+ * set once here and never as a `padding` shorthand further in, so no descendant
+ * can zero it out at narrow widths.
+ */
+.reading-main {
+  margin-inline: auto;
+  width: 100%;
+  max-width: 44rem;
+  padding-inline: 1rem;
+  padding-block: 1.5rem;
+}
+
+/* The catalog and My Courses breathe wider than a lesson body does. */
+.wide-main {
+  margin-inline: auto;
+  width: 100%;
+  max-width: 72rem;
+  padding-inline: 1rem;
+  padding-block: 1.5rem;
+}
+
+/*
+ * A table or a figure must survive 360 px without dragging the page sideways
+ * with it. §5.3's dialect allows both inside a lesson body, and a wide table is
+ * the common case in a language course.
+ */
+.lesson-body table {
+  display: block;
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+.lesson-body img {
+  max-width: 100%;
+  height: auto;
+}
+
+/* FR-AUDIO-02: the block currently being read. */
+.lesson-body [data-block-id][data-playing='true'] {
+  background-color: color-mix(in oklab, currentColor 8%, transparent);
+  border-radius: 0.375rem;
+}
