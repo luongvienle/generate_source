@@ -23,12 +23,15 @@ describe('permissionForJobType', () => {
     for (const jobType of jobTypes) {
       const declared = permissionForJobType(jobType);
       if (declared === undefined) {
-        // Unbuilt producers (P5, P6, P8) must stay undeclared and unwatchable.
+        // Unbuilt producers (P6, P8) must stay undeclared and unwatchable.
         expect(mayWatch(jobType, 'admin_owner')).toBe(false);
       }
     }
-    expect(permissionForJobType('generate_audio')).toBeUndefined();
+    // `generate_audio` was this assertion's example until P5 declared it. The
+    // property under test is unchanged — publish_course (P6) and
+    // send_expiry_reminder (P8) are still undeclared and still unwatchable.
     expect(permissionForJobType('publish_course')).toBeUndefined();
+    expect(permissionForJobType('send_expiry_reminder')).toBeUndefined();
   });
 });
 

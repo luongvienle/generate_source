@@ -2,8 +2,11 @@ import { describe, expect, it } from 'vitest';
 import {
   extensionFor,
   imageMediaTypeList,
+  isAudioMediaType,
   isImageMediaType,
+  mintAudioSegmentKey,
   mintImageKey,
+  mintMergedAudioKey,
   type ImageMediaType,
 } from '../src/keys';
 
@@ -68,5 +71,49 @@ describe('the accepted type list', () => {
     expect(isImageMediaType('image/gif')).toBe(false);
     expect(isImageMediaType('application/pdf')).toBe(false);
     expect(isImageMediaType('image/png')).toBe(true);
+  });
+});
+
+describe('audio keys (P5)', () => {
+  const lessonId = '11111111-1111-4111-8111-111111111111';
+
+  it('mints a segment key from the segment row id, so reuse can copy a URL', () => {
+    const key = mintAudioSegmentKey({ lessonId, audioSegmentId: 'seg-a' });
+    expect(key).toBe(`lessons/${lessonId}/audio/segments/seg-a.mp3`);
+  });
+
+  /**
+   * FR-AUDIO-01 reuses an unchanged segment by copying the previous row's URL.
+   * That only works if the same segment id always mints the same key.
+   */
+  it('is stable across runs for the same segment id', () => {
+    expect(mintAudioSegmentKey({ lessonId, audioSegmentId: 'seg-a' })).toBe(
+      mintAudioSegmentKey({ lessonId, audioSegmentId: 'seg-a' }),
+    );
+  });
+
+  it('separates segments of different lessons', () => {
+    const other = '22222222-2222-4222-8222-222222222222';
+    expect(mintAudioSegmentKey({ lessonId, audioSegmentId: 'seg-a' })).not.toBe(
+      mintAudioSegmentKey({ lessonId: other, audioSegmentId: 'seg-a' }),
+    );
+  });
+
+  /**
+   * The opposite property for the merged file: a regeneration must NOT overwrite
+   * the object a presigned URL is currently serving.
+   */
+  it('mints a DIFFERENT merged key for each run of the same lesson', () => {
+    const first = mintMergedAudioKey({ lessonId, generationJobId: 'job-1' });
+    const second = mintMergedAudioKey({ lessonId, generationJobId: 'job-2' });
+
+    expect(first).toBe(`lessons/${lessonId}/audio/merged/job-1.mp3`);
+    expect(first).not.toBe(second);
+  });
+
+  it('accepts audio/mpeg and refuses anything else', () => {
+    expect(isAudioMediaType('audio/mpeg')).toBe(true);
+    expect(isAudioMediaType('audio/wav')).toBe(false);
+    expect(isAudioMediaType('image/png')).toBe(false);
   });
 });

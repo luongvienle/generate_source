@@ -20,6 +20,7 @@ import { SessionGuard } from '../auth/session.guard';
 import type { RequestWithSession } from '../auth/session-context';
 import { editorOf } from './lesson-content.controller';
 import { NarrationService } from './narration.service';
+import { AudioService } from './audio.service';
 
 /** §9.3's PUT does two things: edit segments, and approve. Either may be absent. */
 const updateBodySchema = z
@@ -51,7 +52,10 @@ const updateBodySchema = z
 @Controller('admin')
 @UseGuards(SessionGuard, RolesGuard)
 export class NarrationController {
-  constructor(@Inject(NarrationService) private readonly narration: NarrationService) {}
+  constructor(
+    @Inject(NarrationService) private readonly narration: NarrationService,
+    @Inject(AudioService) private readonly audio: AudioService,
+  ) {}
 
   /**
    * §9.3 lists only the two writes. An editor cannot render a screen it cannot
@@ -64,11 +68,27 @@ export class NarrationController {
     return this.narration.read(lessonId, editorOf(request));
   }
 
-  /** §6.5 freshness. Script link only — P5 adds the audio one and its key. */
+  /**
+   * §6.5 freshness, both links.
+   *
+   * COMPOSED FROM TWO SERVICES rather than one. P4 shipped the content→script
+   * link and left no `audio` key at all — not a permanently null one, which
+   * would have taught every client to skip it and left P5 unable to distinguish
+   * "no audio yet" from "not implemented". P5 adds the key here, and `null`
+   * now means exactly one thing: this lesson has no lesson_audios row.
+   *
+   * The permission stays `generateAndEditNarrationScript`: the endpoint is the
+   * narration tab's, and §3 gives both admin roles both actions, so adding an
+   * audio-shaped key widens no one's access.
+   */
   @Get('lessons/:lessonId/staleness')
   @RequirePermission('generateAndEditNarrationScript')
   async staleness(@Param('lessonId') lessonId: string) {
-    return this.narration.staleness(lessonId);
+    const [script, audio] = await Promise.all([
+      this.narration.staleness(lessonId),
+      this.audio.stalenessFor(lessonId),
+    ]);
+    return { ...script, audio };
   }
 
   /**

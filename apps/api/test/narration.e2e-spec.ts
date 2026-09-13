@@ -366,15 +366,22 @@ describe('§6.5 staleness', () => {
     expect(response.body.script.orphanedSegmentBlockIds).toEqual([]);
   });
 
-  it('has NO audio key until P5 adds one', () => {
-    // Asserted explicitly so P5's addition is a deliberate change rather than a
-    // field that quietly appears. A key that is always null teaches every client
-    // to skip it.
+  /**
+   * P4 asserted the opposite here — that the key did NOT exist — explicitly so
+   * that P5's addition would be a deliberate change rather than a field quietly
+   * appearing. That tripwire fired on the first full run after P5 wired the
+   * audio link, which is exactly what it was for.
+   *
+   * The property it protected survives, inverted: the key is now always present,
+   * and `null` means one specific thing — this lesson has no lesson_audios row.
+   * It never means "not implemented".
+   */
+  it('has an audio key, null when the lesson has no audio row', () => {
     return readStaleness(ids.lesson, tokens.owner)
       .expect(200)
       .then((response) => {
-        expect(Object.keys(response.body)).not.toContain('audio');
-        expect(response.body).not.toHaveProperty('audio');
+        expect(Object.keys(response.body)).toContain('audio');
+        expect(response.body.audio).toBeNull();
       });
   });
 

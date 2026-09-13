@@ -57,6 +57,30 @@ export const errorCodes = {
   SCRIPT_NOT_APPROVABLE: 'SCRIPT_NOT_APPROVABLE',
   /** The script moved on since the tab loaded it; another admin saved first. */
   SCRIPT_CONFLICT: 'SCRIPT_CONFLICT',
+  /** No narration_scripts row for this lesson; there is nothing to voice (P5). */
+  AUDIO_SCRIPT_NOT_FOUND: 'AUDIO_SCRIPT_NOT_FOUND',
+  /**
+   * §5.5 makes admin approval required before audio generation and names it as
+   * the enforcement point for FR-SCRIPT-02. This is where that is enforced.
+   */
+  AUDIO_SCRIPT_NOT_APPROVED: 'AUDIO_SCRIPT_NOT_APPROVED',
+  /**
+   * The script's COMPUTED status is stale, failed, generating or pending.
+   * Synthesizing it would buy audio FR-PUB-01 then refuses to publish.
+   */
+  AUDIO_SCRIPT_STALE: 'AUDIO_SCRIPT_STALE',
+  /** An audio run is already in flight for this lesson; the jobId travels with the 409. */
+  AUDIO_GENERATION_IN_FLIGHT: 'AUDIO_GENERATION_IN_FLIGHT',
+  /** More segments than AUDIO_RUN_MAX_SEGMENTS; refused before the first paid call. */
+  AUDIO_TOO_MANY_SEGMENTS: 'AUDIO_TOO_MANY_SEGMENTS',
+  /**
+   * A segment exceeds the provider's maxInputCharacters. Refused at precondition
+   * time with the offending blockId, rather than on attempt three of a run that
+   * has already paid for every segment before it.
+   */
+  AUDIO_SEGMENT_TOO_LONG: 'AUDIO_SEGMENT_TOO_LONG',
+  /** FR-AUDIO-03: the course's voice is not one the selected provider accepts. */
+  AUDIO_VOICE_NOT_CONFIGURED: 'AUDIO_VOICE_NOT_CONFIGURED',
 } as const;
 
 export type ErrorCode = (typeof errorCodes)[keyof typeof errorCodes];

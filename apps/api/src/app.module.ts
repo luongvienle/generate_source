@@ -28,9 +28,13 @@ import { ImageQueue } from './jobs/image.queue';
 import { NarrationQueue } from './jobs/narration.queue';
 import { NarrationController } from './content/narration.controller';
 import { NarrationService } from './content/narration.service';
+import { AudioQueue } from './jobs/audio.queue';
+import { AudioController } from './content/audio.controller';
+import { AudioService } from './content/audio.service';
 import { JobStatusService } from './jobs/job-status.service';
 import { JobWatchGuard } from './jobs/job-watch.guard';
 import { OBJECT_STORAGE, S3ObjectStorage, s3ConfigFromEnv } from '@knowledge-explorer/storage';
+import { TEXT_TO_SPEECH_PROVIDER, createTextToSpeechProvider } from '@knowledge-explorer/ai';
 
 @Module({
   controllers: [
@@ -42,6 +46,7 @@ import { OBJECT_STORAGE, S3ObjectStorage, s3ConfigFromEnv } from '@knowledge-exp
     LessonContentController,
     ImagesController,
     NarrationController,
+    AudioController,
     ImportController,
     CategoriesController,
     CoursesController,
@@ -55,6 +60,8 @@ import { OBJECT_STORAGE, S3ObjectStorage, s3ConfigFromEnv } from '@knowledge-exp
     ImageQueue,
     NarrationQueue,
     NarrationService,
+    AudioQueue,
+    AudioService,
     JobStatusService,
     JobWatchGuard,
     InvitationService,
@@ -69,6 +76,13 @@ import { OBJECT_STORAGE, S3ObjectStorage, s3ConfigFromEnv } from '@knowledge-exp
     ImagesService,
     { provide: OBJECT_STORAGE, useFactory: () => new S3ObjectStorage(s3ConfigFromEnv()) },
     { provide: EMAIL_PROVIDER, useClass: LogEmailProvider },
+    /**
+     * §11's TextToSpeechProvider. Selected by environment ONCE at startup, so a
+     * TTS_PROVIDER=openai with no key fails the boot rather than discovering it
+     * on the first paid call. The API needs it only for `maxInputCharacters`,
+     * which is what lets a too-long segment be refused before any job exists.
+     */
+    { provide: TEXT_TO_SPEECH_PROVIDER, useFactory: () => createTextToSpeechProvider() },
   ],
 })
 export class AppModule {}

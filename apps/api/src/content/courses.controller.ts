@@ -18,8 +18,21 @@ import { RequirePermission } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 import { SessionGuard } from '../auth/session.guard';
 import { StructureService } from './structure.service';
+import { AudioService } from './audio.service';
 
 const pricingTypeSchema = z.strictObject({ pricingType: z.enum(pricingTypes) });
+
+/**
+ * FR-AUDIO-03: a course has one configured voice in v1.
+ *
+ * `null` clears it back to the install default (TTS_DEFAULT_VOICE), which is why
+ * the field is nullable rather than absent — "use the default" and "leave it
+ * alone" are different requests and a PATCH must be able to express both.
+ */
+const voiceSchema = z.strictObject({
+  voiceIdentifier: z.string().min(1).nullable(),
+  voiceProviderName: z.string().min(1).nullable().optional(),
+});
 
 const structureSchema = z.strictObject({
   chapters: z
@@ -38,6 +51,7 @@ export class CoursesController {
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(StructureService) private readonly structure: StructureService,
+    @Inject(AudioService) private readonly audio: AudioService,
   ) {}
 
   /**
@@ -103,6 +117,20 @@ export class CoursesController {
       }
       throw error;
     }
+  }
+
+  /**
+   * FR-AUDIO-03. Owner-only by §3, matching pricing-type above: §3 declares no
+   * "configure voice" action and P5 does not invent one, so this reuses the
+   * action §3 already assigns to course configuration.
+   */
+  @Patch(':courseId/voice')
+  @RequirePermission('createCategoriesAndCourses')
+  async setVoice(@Param('courseId') courseId: string, @Body() body: unknown) {
+    const parsed = voiceSchema.safeParse(body);
+    if (!parsed.success) throw new BadRequestException({ errorCode: 'INVALID_BODY' });
+
+    return this.audio.setVoice(courseId, parsed.data);
   }
 
   /**

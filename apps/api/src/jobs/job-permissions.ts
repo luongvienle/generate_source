@@ -9,14 +9,16 @@ import { isAllowed, type JobType, type PermissionAction, type UserRole } from '@
  * whose action differs again.
  *
  * PARTIAL, AND DENY-BY-DEFAULT. A job type with no row here is refused rather
- * than allowed, so P4, P5 and P6 adding a producer without adding its row fails
- * closed — the same rule RolesGuard applies to an endpoint with no declared
- * permission. P5 and P6 inherit that guarantee.
+ * than allowed, so a phase adding a producer without adding its row fails closed
+ * — the same rule RolesGuard applies to an endpoint with no declared permission.
+ * P6's publish_course and P8's send_expiry_reminder still inherit that guarantee,
+ * and job-permissions.spec.ts holds it under test through them.
  */
 const jobPermissions: Partial<Record<JobType, PermissionAction>> = {
   import_course_outline: 'importCurriculumOutline',
   generate_image: 'generateAndSelectImages',
   generate_narration_script: 'generateAndEditNarrationScript',
+  generate_audio: 'generateAudio',
 };
 
 /** P1's dry run has no §8.1 job_type, and is part of the import flow. */
@@ -35,6 +37,7 @@ export function permissionForJobType(jobType: WatchableJobType): PermissionActio
 const lessonTargetedJobTypes: ReadonlySet<string> = new Set<WatchableJobType>([
   'generate_image',
   'generate_narration_script',
+  'generate_audio',
 ]);
 
 export const isLessonTargeted = (jobType: WatchableJobType): boolean =>

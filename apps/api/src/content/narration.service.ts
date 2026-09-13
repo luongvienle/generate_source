@@ -89,9 +89,12 @@ export interface StalenessView {
         readonly scriptChecksum: string;
       })
     | null;
-  // NOTE: there is deliberately no `audio` key until P5 adds one. A key that is
-  // always null teaches every client to skip it, and leaves P5 unable to tell
-  // "no audio yet" from "not implemented".
+  /**
+   * P5 adds the audio link, COMPOSED IN THE CONTROLLER rather than here: this
+   * service owns the content→script link and knows nothing about lesson_audios,
+   * and keeping it that way is what stops the two halves of §6.5 from tangling.
+   * See NarrationController.staleness.
+   */
 }
 
 interface LessonRow {
