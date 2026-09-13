@@ -54,9 +54,28 @@ jobs:
       S3_SECRET_ACCESS_KEY: knowledge_explorer
       # The deterministic fake: CI never calls a paid provider.
       IMAGE_PROVIDER: fake
+      # Likewise for speech (P5). The fake emits real MP3 tones, so the merge and
+      # its offset assertions run for real without a key.
+      TTS_PROVIDER: fake
 
     steps:
       - uses: actions/checkout@v4
+
+      # P5 needs ffmpeg AND ffprobe: apps/worker refuses to start without both,
+      # the merge decodes and re-encodes every segment, and the fake TTS provider
+      # generates its tones with them.
+      #
+      # Installed EXPLICITLY rather than relying on whatever ubuntu-latest ships.
+      # The offsets in audio_segments are validated against a specific ffmpeg's
+      # behaviour, and a runner image changing underneath us would break the
+      # audio suite with no local reproduction and nothing recording which
+      # version the numbers were validated against.
+      - name: Install ffmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+          ffmpeg -version | head -n 1
+          ffprobe -version | head -n 1
 
       - uses: pnpm/action-setup@v4
 
