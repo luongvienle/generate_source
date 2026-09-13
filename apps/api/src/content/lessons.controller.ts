@@ -43,6 +43,17 @@ const updateLessonSchema = z
     keyPoints: z.array(z.string().min(1)).optional(),
     estimatedMinutes: z.int().positive().nullish(),
     assignedAdminId: z.uuid().nullish(),
+    /**
+     * FR-LRN-01's free-preview flag, and §14 decision 3's per-course
+     * configuration. Nothing wrote this column before P7, so §7.3's
+     * `isFreePreview` short-circuit was unreachable through the product.
+     *
+     * Not owner-only: §3 has no row for free-preview selection, and choosing
+     * which lesson sells the course is the same authoring judgement as writing
+     * it, so it rides on `createAndEditChaptersAndLessons` with the rest of
+     * this endpoint rather than inventing a matrix row §3 does not have.
+     */
+    isFreePreview: z.boolean().optional(),
   })
   .refine((body) => Object.keys(body).length > 0, {
     message: 'Provide at least one field to change.',
@@ -60,6 +71,7 @@ interface UpdatedLesson {
   keyPoints: unknown;
   estimatedMinutes: number | null;
   assignedAdminId: string | null;
+  isFreePreview: boolean;
 }
 
 /** §9.3 lesson CRUD and assignments. Both roles by §3, narrowed by R-01 and R-02. */
@@ -151,9 +163,11 @@ export class LessonsController {
           keyPoints: true,
           estimatedMinutes: true,
           assignedAdminId: true,
+          isFreePreview: true,
         },
       });
-      // FR-PUB-03: the title and estimated minutes are both in §4.3's snapshot.
+      // FR-PUB-03: the title, the estimated minutes and the free-preview flag
+      // are all three in §4.3's snapshot.
       await markUnpublishedChangesForLesson(this.prisma.client, lessonId);
       return updated;
     } catch (error) {

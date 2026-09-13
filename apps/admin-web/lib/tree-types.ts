@@ -4,6 +4,8 @@ export interface TreeLesson {
   title: string;
   contentStatus: string;
   assignedAdminId: string | null;
+  /** FR-LRN-01: readable without entitlement, and the course's shop window. */
+  isFreePreview: boolean;
 }
 
 export interface TreeChapter {

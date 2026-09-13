@@ -129,6 +129,9 @@ export class CoursesController {
                 title: true,
                 contentStatus: true,
                 assignedAdminId: true,
+                // FR-LRN-01: the tree is where an admin marks a lesson a free
+                // preview, so the flag has to travel with it.
+                isFreePreview: true,
               },
             },
           },

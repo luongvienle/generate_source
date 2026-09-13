@@ -235,6 +235,20 @@ describe('FR-PUB-03 on a published course', () => {
     expect(await flagOf(seed.courseId)).toBe(true);
   });
 
+  it('flags a free-preview toggle', async () => {
+    // P7 added `isFreePreview` to the same PATCH, so it inherits this flagging
+    // rather than adding a second markUnpublishedChangesForLesson call. It is in
+    // §4.3's snapshot, so a publish genuinely has to catch up on it.
+    const response = await api()
+      .patch(`/api/admin/lessons/${seed.lessonId}`)
+      .set(as(ownerToken))
+      .send({ isFreePreview: true })
+      .expect(200);
+
+    expect((response.body as { isFreePreview: boolean }).isFreePreview).toBe(true);
+    expect(await flagOf(seed.courseId)).toBe(true);
+  });
+
   it('flags a lesson soft delete', async () => {
     await api()
       .delete(`/api/admin/lessons/${seed.lessonId}`)

@@ -252,6 +252,29 @@ export function CurriculumTree({
                       }
                     />
                   ) : null}
+                  {/*
+                    FR-LRN-01: a free preview reads without entitlement, so this
+                    is the one control here that changes what an anonymous
+                    visitor can see. §14 decision 3 leaves the NUMBER of
+                    previews open; the app makes it per-lesson and picks none.
+                  */}
+                  <label>
+                    <input
+                      type="checkbox"
+                      data-testid="lesson-free-preview"
+                      checked={lesson.isFreePreview}
+                      disabled={busy}
+                      onChange={(event) =>
+                        void act(() =>
+                          apiFetch(`/admin/lessons/${lesson.id}`, {
+                            method: 'PATCH',
+                            body: JSON.stringify({ isFreePreview: event.target.checked }),
+                          }),
+                        )
+                      }
+                    />{' '}
+                    Free preview
+                  </label>
                   <button
                     type="button"
                     data-testid="lesson-delete"
