@@ -46,7 +46,7 @@ importers:
         version: 16.3.5(@playwright/test@1.63.0)(@types/node@22.20.2)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       next-auth:
         specifier: 5.0.0-beta.32
-        version: 5.0.0-beta.32(next@16.3.5(@playwright/test@1.63.0)(@types/node@22.20.2)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react@19.3.0)
+        version: 5.0.0-beta.32(next@16.3.5(@playwright/test@1.63.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react@19.3.0)
       react:
         specifier: ^19.3.0
         version: 19.3.0
@@ -99,6 +99,9 @@ importers:
       '@knowledge-explorer/ai':
         specifier: workspace:*
         version: link:../../packages/ai
+      '@knowledge-explorer/commerce':
+        specifier: workspace:*
+        version: link:../../packages/commerce
       '@knowledge-explorer/content':
         specifier: workspace:*
         version: link:../../packages/content
@@ -157,9 +160,21 @@ importers:
 
   apps/learner-web:
     dependencies:
+      '@auth/prisma-adapter':
+        specifier: 2.11.3
+        version: 2.11.3(@prisma/client@7.10.0(prisma@7.10.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(typescript@5.9.3))(typescript@5.9.3))
+      '@knowledge-explorer/content':
+        specifier: workspace:*
+        version: link:../../packages/content
+      '@knowledge-explorer/database':
+        specifier: workspace:*
+        version: link:../../packages/database
       next:
         specifier: ^16.3.5
         version: 16.3.5(@playwright/test@1.63.0)(@types/node@22.20.2)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      next-auth:
+        specifier: 5.0.0-beta.32
+        version: 5.0.0-beta.32(next@16.3.5(@playwright/test@1.63.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react@19.3.0)
       react:
         specifier: ^19.3.0
         version: 19.3.0
@@ -170,12 +185,30 @@ importers:
       '@knowledge-explorer/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@knowledge-explorer/storage':
+        specifier: workspace:*
+        version: link:../../packages/storage
+      '@playwright/test':
+        specifier: ^1.50.0
+        version: 1.63.0
+      '@tailwindcss/postcss':
+        specifier: ^4.3.3
+        version: 4.3.3
+      '@tailwindcss/typography':
+        specifier: ^0.5.20
+        version: 0.5.20(tailwindcss@4.3.3)
       '@types/react':
         specifier: ^19.3.0
         version: 19.3.0
       '@types/react-dom':
         specifier: ^19.3.0
         version: 19.3.0(@types/react@19.3.0)
+      dotenv:
+        specifier: ^17.4.2
+        version: 17.4.2
+      tailwindcss:
+        specifier: ^4.3.3
+        version: 4.3.3
       typescript:
         specifier: 5.9.3
         version: 5.9.3
@@ -249,10 +282,23 @@ importers:
         version: 5.0.0(@types/node@22.20.2)(jsdom@26.1.0)(vite@8.3.0(@types/node@22.20.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.13)(yaml@2.9.0))
 
   packages/commerce:
-    devDependencies:
+    dependencies:
+      '@knowledge-explorer/database':
+        specifier: workspace:*
+        version: link:../database
       '@knowledge-explorer/shared':
         specifier: workspace:*
         version: link:../shared
+    devDependencies:
+      '@types/node':
+        specifier: ^22.20.2
+        version: 22.20.2
+      dotenv:
+        specifier: ^17.4.2
+        version: 17.4.2
+      vitest:
+        specifier: ^5.0.0
+        version: 5.0.0(@types/node@22.20.2)(jsdom@26.1.0)(vite@8.3.0(@types/node@22.20.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.13)(yaml@2.9.0))
 
   packages/content:
     dependencies:
@@ -5820,7 +5866,7 @@ snapshots:
     dependencies:
       content-type: 2.1.0
 
-  next-auth@5.0.0-beta.32(next@16.3.5(@playwright/test@1.63.0)(@types/node@22.20.2)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react@19.3.0):
+  next-auth@5.0.0-beta.32(next@16.3.5(@playwright/test@1.63.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react@19.3.0):
     dependencies:
       '@auth/core': 0.41.3
       next: 16.3.5(@playwright/test@1.63.0)(@types/node@22.20.2)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)

@@ -5,9 +5,16 @@
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@knowledge-explorer/database": "workspace:*",
+    "@knowledge-explorer/shared": "workspace:*"
   },
   "devDependencies": {
-    "@knowledge-explorer/shared": "workspace:*"
+    "@types/node": "^22.20.2",
+    "dotenv": "^17.4.2",
+    "vitest": "^5.0.0"
   }
 }
