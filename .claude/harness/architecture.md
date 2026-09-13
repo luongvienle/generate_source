@@ -26,8 +26,12 @@ elements are only partly built:
   (`packages/storage`, MinIO/S3) — all bound through Symbol tokens [verified].
   P4 adds `LlmProvider` (`packages/ai`, an Anthropic Messages adapter over the
   official SDK plus a deterministic fake selected by `LLM_PROVIDER`; `anthropic`
-  without a key throws rather than downgrading) [verified].
-  `TextToSpeechProvider` (P5) and `PaymentProvider` (P8) still have no interface.
+  without a key throws rather than downgrading) [verified]. P5 adds
+  `TextToSpeechProvider` (`packages/ai`, an OpenAI speech adapter over plain
+  `fetch` — no SDK, following P3's image adapter — plus a fake selected by
+  `TTS_PROVIDER` that emits REAL MP3 tones so the merge and its offsets are
+  exercised without a paid call) [verified]. Only `PaymentProvider` (P8) still
+  has no interface.
 
 **Not** microservices: the apps share one database and one Prisma schema
 [verified]. **Not** feature-based: `apps/api/src` is organised by technical
@@ -89,21 +93,37 @@ with `health` excluded, port from `API_PORT`, default 3001);
 `apps/admin-web/app/` and `apps/learner-web/app/` (Next App Router).
 
 **Unbuilt flows.** Block extraction (§6.1), image generation (§6.2), narration
-(§6.3) and the content→script link of the §6.5 staleness chain are built.
-Narration segments carry a per-segment checksum so P5 can re-synthesize only what
-moved, and `script_status` is never stored as `stale` — §6.5 says staleness is
-computed on read, so the API derives it [verified]. Audio (§6.4), the
-script→audio link, the §4.3 draft/published split and all of §7's commerce exist
-only as tables. No code reads or writes them.
+(§6.3), audio (§6.4) and the WHOLE §6.5 staleness chain are built. Narration
+segments carry a per-segment checksum and `audio_segments.source_segment_checksum`
+holds it back, which is what makes FR-AUDIO-01's per-segment re-synthesis
+possible; neither `script_status` nor `audio_status` is ever stored as `stale` —
+§6.5 says staleness is computed on read, so the API derives both [verified]. The
+§4.3 draft/published split and all of §7's commerce exist only as tables. No code
+reads or writes them.
 
-**Background jobs** run on BullMQ with three queues: `curriculum-import` (P1),
-`image-generation` (P3) and `narration-script` (P4), all consumed by
-`apps/worker` through `withJobLifecycle`, which drives the `generation_jobs`
-state machine. Image and narration job ids are qualified `image:<n>` and
-`script:<n>` because BullMQ ids are a per-queue counter [verified]. The queue
-producers are deliberately three siblings rather than one factory — the
-extraction was reconsidered at the third and deferred to P5's audio queue, with
-the reasoning recorded in `packages/shared/src/queues.ts` [verified].
+**ffmpeg is a runtime dependency of `apps/worker` since P5** [verified].
+`apps/worker/src/audio/ffmpeg.ts` is the only place the worker spawns a process;
+`main.ts` probes for `ffmpeg` and `ffprobe` at boot and exits non-zero naming the
+missing one. The merge decodes every segment to PCM, concatenates and encodes
+once rather than stream-copying: measured at P5, eight `-c copy` segments drift
+404 ms against 0 ms for the re-encode, because MP3 padding accumulates per file
+[verified].
+
+**Background jobs** run on BullMQ with four queues: `curriculum-import` (P1),
+`image-generation` (P3), `narration-script` (P4) and `audio-synthesis` (P5), all
+consumed by `apps/worker` through `withJobLifecycle`, which drives the
+`generation_jobs` state machine [verified]. **P5 performed the extraction P3 and
+P4 had twice deferred**: `queueDefinitions` in `packages/shared/src/queues.ts`
+now holds each queue's name, env override, id prefix, retention and fallback
+job_type as data, and `apps/api/src/jobs/base.queue.ts` owns construction, the
+NFR-03 retry defaults and id qualification. The producers remain four subclasses,
+deliberately — import alone has two job names and a Redis-cached dry-run result
+[verified]. Image, narration and audio ids are qualified `image:<n>`,
+`script:<n>` and `audio:<n>`; **import's prefix is the empty string** because P1
+minted unprefixed ids and its screens still hold them, which is why
+`prefixedQueueDefinitions` and `unprefixedQueueDefinition` are separate exports:
+`'anything'.startsWith('')` is always true, so a resolver iterating the registry
+in declaration order would route every id to import [verified].
 `withJobLifecycle` treats a BullMQ `UnrecoverableError` as a final attempt, so a
 job that must not be retried still reaches a terminal row [verified].
 
