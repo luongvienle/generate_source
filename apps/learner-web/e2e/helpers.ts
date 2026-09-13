@@ -35,6 +35,31 @@ export async function seedStaff(role: 'admin_owner' | 'admin', run: string): Pro
 export const adminCookie = (token: string) => ({ Cookie: `authjs.session-token=${token}` });
 
 /**
+ * A learner session minted directly, for asserting refusals against the API.
+ *
+ * `signInAsLearner` drives a real magic link through the browser and is what
+ * proves the sign-in flow; it cannot give a fetch() a cookie. P9's scenario
+ * checks 401/404/409 responses straight from the API, which needs this.
+ */
+export async function seedLearner(label: string, run: string): Promise<SeededUser> {
+  const email = `${label}-e2e-${run}@example.test`;
+  const user = await prisma.user.create({
+    data: { email, userRole: 'learner' },
+    select: { id: true },
+  });
+  const token = `e2e-${run}-${randomBytes(6).toString('hex')}`;
+  await prisma.session.create({
+    data: { sessionToken: token, userId: user.id, expires: new Date(Date.now() + 3_600_000) },
+  });
+  return { id: user.id, email, token };
+}
+
+/** learner-web's cookie name, which is NOT admin-web's — see optional-session.ts. */
+export const learnerCookie = (token: string) => ({
+  Cookie: `authjs.learner-session-token=${token}`,
+});
+
+/**
  * Signs a learner in through a REAL Auth.js magic link, the way
  * apps/admin-web/e2e/helpers.ts does.
  *
