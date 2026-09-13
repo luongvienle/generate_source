@@ -21,6 +21,7 @@
   },
   "dependencies": {
     "@knowledge-explorer/ai": "workspace:*",
+    "@knowledge-explorer/commerce": "workspace:*",
     "@knowledge-explorer/content": "workspace:*",
     "@knowledge-explorer/database": "workspace:*",
     "@knowledge-explorer/storage": "workspace:*",

@@ -94,6 +94,20 @@ export const errorCodes = {
    * The 409 names the current status and every status reachable from it.
    */
   INVALID_PUBLICATION_TRANSITION: 'INVALID_PUBLICATION_TRANSITION',
+  /**
+   * §7.3: the caller holds no entitlement to this lesson and it is not a free
+   * preview. The 403 carries the course slug and title so a paywall renders
+   * from the refusal alone — it carries NO lesson content, which is the point.
+   */
+  LESSON_NOT_ENTITLED: 'LESSON_NOT_ENTITLED',
+  /** §9.4: no lesson_audios row with this id. */
+  MEDIA_NOT_FOUND: 'MEDIA_NOT_FOUND',
+  /**
+   * §4.3: the course exists but is not on the published track, so the learner
+   * app has nothing to show. Deliberately indistinguishable from a course that
+   * does not exist — a draft course's slug is not public information.
+   */
+  COURSE_NOT_PUBLISHED: 'COURSE_NOT_PUBLISHED',
 } as const;
 
 export type ErrorCode = (typeof errorCodes)[keyof typeof errorCodes];
