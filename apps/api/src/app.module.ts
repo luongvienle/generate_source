@@ -23,6 +23,7 @@ import { AssignmentGuard } from './auth/assignment.guard';
 import { PublishedLockGuard } from './auth/published-lock.guard';
 import { RolesGuard } from './auth/roles.guard';
 import { SessionGuard } from './auth/session.guard';
+import { LearnerSessionGuard } from './auth/learner-session.guard';
 import { WriteTargetResolver } from './auth/target-resolver';
 import { OwnerFieldGuard } from './auth/owner-field.guard';
 import { ImportQueue, REDIS_URL } from './jobs/import.queue';
@@ -38,6 +39,13 @@ import { JobStatusService } from './jobs/job-status.service';
 import { JobWatchGuard } from './jobs/job-watch.guard';
 import { OBJECT_STORAGE, S3ObjectStorage, s3ConfigFromEnv } from '@knowledge-explorer/storage';
 import { TEXT_TO_SPEECH_PROVIDER, createTextToSpeechProvider } from '@knowledge-explorer/ai';
+import { PublicCatalogController } from './public/catalog.controller';
+import { CatalogService } from './public/catalog.service';
+import { PublicLessonsController } from './public/lessons.controller';
+import { PublicMediaController } from './public/media.controller';
+import { PublicMeController } from './public/me.controller';
+import { ProgressService } from './public/progress.service';
+import { ReaderService } from './public/reader.service';
 
 @Module({
   controllers: [
@@ -56,6 +64,16 @@ import { TEXT_TO_SPEECH_PROVIDER, createTextToSpeechProvider } from '@knowledge-
     PublishingController,
     JobsController,
     CourseStreamController,
+    /**
+     * §9.4's public surface. These two carry NO guard and NO permission, which
+     * is deliberate and is asserted by entitlement-gates.e2e-spec.ts — see the
+     * note on PublicLessonsController. §7.3's resolver in packages/commerce
+     * gates them instead, and E-01 requires it on both.
+     */
+    PublicCatalogController,
+    PublicLessonsController,
+    PublicMediaController,
+    PublicMeController,
   ],
   providers: [
     PrismaService,
@@ -72,6 +90,7 @@ import { TEXT_TO_SPEECH_PROVIDER, createTextToSpeechProvider } from '@knowledge-
     InvitationService,
     WriteTargetResolver,
     SessionGuard,
+    LearnerSessionGuard,
     RolesGuard,
     PublishedLockGuard,
     AssignmentGuard,
@@ -80,6 +99,9 @@ import { TEXT_TO_SPEECH_PROVIDER, createTextToSpeechProvider } from '@knowledge-
     PublishingService,
     LessonContentService,
     ImagesService,
+    ReaderService,
+    CatalogService,
+    ProgressService,
     { provide: OBJECT_STORAGE, useFactory: () => new S3ObjectStorage(s3ConfigFromEnv()) },
     { provide: EMAIL_PROVIDER, useClass: LogEmailProvider },
     /**
