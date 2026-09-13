@@ -27,7 +27,11 @@ import {
   type GenerateNarrationScriptJobData,
 } from '@knowledge-explorer/shared';
 import { worstCaseCallCount } from '@knowledge-explorer/ai';
-import { createQueuedJob, markJobAttemptFailed } from '@knowledge-explorer/database';
+import {
+  createQueuedJob,
+  markJobAttemptFailed,
+  markUnpublishedChangesForLesson,
+} from '@knowledge-explorer/database';
 import { PrismaService } from '../prisma/prisma.service';
 import { NARRATION_JOB_ID_PREFIX, NarrationQueue } from '../jobs/narration.queue';
 import { ImagesService } from './images.service';
@@ -499,6 +503,15 @@ export class NarrationService {
             : { reviewedByUserId: null, reviewedAt: null }),
       },
     });
+
+    /**
+     * FR-PUB-03. §8 gives narration and audio NO published copy — §9.4 serves
+     * them live from these tables — so an edited segment reaches a learner the
+     * moment it is saved, without a publish. The flag still belongs: it says the
+     * course has changed since it was published, which is exactly true, and the
+     * owner is the one who decides whether the snapshot should catch up.
+     */
+    await markUnpublishedChangesForLesson(this.prisma.client, lessonId);
 
     return this.read(lessonId, editor);
   }

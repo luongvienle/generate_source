@@ -5,6 +5,7 @@ import {
   type ImportPlan,
 } from '@knowledge-explorer/content';
 import {
+  markUnpublishedChangesForCourse,
   parkChapterOrders,
   parkLessonOrders,
   type PrismaClient,
@@ -181,15 +182,12 @@ export function createImportProcessor(prisma: PrismaClient) {
         });
       }
 
-      // §4.3: learners keep seeing the last published snapshot until P6 republishes,
+      // §4.3: learners keep seeing the last published snapshot until a republish,
       // so a re-import of a published course only flags that the two now differ.
+      // The `published` test lives in the helper's WHERE clause since P6; this
+      // local copy stays only because the return value reports it.
       const hasUnpublishedChanges = course.publicationStatus === 'published';
-      if (hasUnpublishedChanges) {
-        await tx.course.update({
-          where: { id: course.id },
-          data: { hasUnpublishedChanges: true },
-        });
-      }
+      await markUnpublishedChangesForCourse(tx, course.id);
 
       return {
         category: plan.category,

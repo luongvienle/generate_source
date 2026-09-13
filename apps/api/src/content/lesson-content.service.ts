@@ -6,6 +6,7 @@ import {
   type ParseError,
 } from '@knowledge-explorer/content';
 import { errorCodes, type UserRole } from '@knowledge-explorer/shared';
+import { markUnpublishedChangesForCourse } from '@knowledge-explorer/database';
 import { PrismaService } from '../prisma/prisma.service';
 
 /**
@@ -204,10 +205,10 @@ export class LessonContentService {
         await tx.lesson.update({ where: { id: lessonId }, data: { contentStatus: 'drafting' } });
       }
       if (raisesUnpublishedFlag) {
-        await tx.course.update({
-          where: { id: lesson.chapter.course.id },
-          data: { hasUnpublishedChanges: true },
-        });
+        // FR-PUB-03. The `published` test is inside the helper's WHERE clause
+        // since P6; `raisesUnpublishedFlag` is kept because it also decides
+        // whether the response reports the change.
+        await markUnpublishedChangesForCourse(tx, lesson.chapter.course.id);
       }
     });
 

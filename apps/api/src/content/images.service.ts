@@ -23,7 +23,11 @@ import {
   type ObjectStorage,
 } from '@knowledge-explorer/storage';
 import { composeImagePrompt } from '@knowledge-explorer/ai';
-import { createQueuedJob, markJobAttemptFailed } from '@knowledge-explorer/database';
+import {
+  createQueuedJob,
+  markJobAttemptFailed,
+  markUnpublishedChangesForLesson,
+} from '@knowledge-explorer/database';
 import { PrismaService } from '../prisma/prisma.service';
 import { ImageQueue } from '../jobs/image.queue';
 import { readBlockList, resolveEditability, type Editor } from './lesson-content.service';
@@ -358,6 +362,12 @@ export class ImagesService {
           ...(alternativeText === undefined ? {} : { alternativeText }),
         },
       });
+
+      // FR-PUB-03. Selection, caption and alt text are all what a learner reads
+      // under a figure, so any of them changes the course against its snapshot.
+      // Generating candidates does NOT flag: an unselected candidate changes
+      // nothing a learner sees.
+      await markUnpublishedChangesForLesson(tx, lessonId);
     });
 
     return this.readFigure(lessonId, blockReferenceId);

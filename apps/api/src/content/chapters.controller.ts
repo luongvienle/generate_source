@@ -12,6 +12,10 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { z } from 'zod';
+import {
+  markUnpublishedChangesForChapter,
+  markUnpublishedChangesForCourse,
+} from '@knowledge-explorer/database';
 import { PrismaService } from '../prisma/prisma.service';
 import { AssignmentGuard } from '../auth/assignment.guard';
 import { OwnerFieldGuard, OwnerOnlyFields } from '../auth/owner-field.guard';
@@ -61,7 +65,7 @@ export class ChaptersController {
     });
     if (!course) throw new NotFoundException({ errorCode: 'COURSE_NOT_FOUND' });
 
-    return this.prisma.client.chapter.create({
+    const created = await this.prisma.client.chapter.create({
       data: {
         courseId: parsed.data.courseId,
         chapterOrder: parsed.data.chapterOrder,
@@ -70,6 +74,9 @@ export class ChaptersController {
       },
       select: { id: true, chapterOrder: true, title: true, description: true },
     });
+    // FR-PUB-03: a new chapter changes the table of contents learners see.
+    await markUnpublishedChangesForCourse(this.prisma.client, parsed.data.courseId);
+    return created;
   }
 
   @Patch(':chapterId')
@@ -80,11 +87,16 @@ export class ChaptersController {
     if (!parsed.success) throw new BadRequestException({ errorCode: 'INVALID_BODY' });
 
     try {
-      return await this.prisma.client.chapter.update({
+      const updated = await this.prisma.client.chapter.update({
         where: { id: chapterId },
         data: parsed.data,
         select: { id: true, title: true, description: true, assignedAdminId: true },
       });
+      // FR-PUB-03. An assignment-only edit also flags, which is harmless: the
+      // alternative is inspecting the body to decide, and a spurious "publish
+      // changes" costs an owner one click while a missed one costs correctness.
+      await markUnpublishedChangesForChapter(this.prisma.client, chapterId);
+      return updated;
     } catch (error) {
       if ((error as { code?: string }).code === 'P2025') {
         throw new NotFoundException({ errorCode: 'CHAPTER_NOT_FOUND' });
@@ -110,6 +122,9 @@ export class ChaptersController {
         where: { chapterId, deletedAt: null },
         data: { deletedAt },
       });
+      // FR-PUB-03: §4.3 keeps the deleted rows in the last published snapshot
+      // until the next publish, so the course genuinely differs from it now.
+      await markUnpublishedChangesForChapter(this.prisma.client, chapterId);
       return chapter;
     } catch (error) {
       if ((error as { code?: string }).code === 'P2025') {

@@ -1,6 +1,10 @@
 import { Inject, Injectable, UnprocessableEntityException } from '@nestjs/common';
 import { errorCodes } from '@knowledge-explorer/shared';
-import { parkChapterOrders, parkLessonOrders } from '@knowledge-explorer/database';
+import {
+  markUnpublishedChangesForCourse,
+  parkChapterOrders,
+  parkLessonOrders,
+} from '@knowledge-explorer/database';
 import { PrismaService } from '../prisma/prisma.service';
 
 export interface StructureChapter {
@@ -89,6 +93,11 @@ export class StructureService {
           });
         }
       }
+
+      // FR-PUB-03: ordering IS §4.3's snapshot, so a reorder is exactly the kind
+      // of change a learner would see. Inside the transaction, so a rewrite that
+      // rolls back does not leave the flag claiming an edit that never landed.
+      await markUnpublishedChangesForCourse(tx, courseId);
     });
   }
 }

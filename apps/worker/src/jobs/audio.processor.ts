@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { UnrecoverableError, type Job } from 'bullmq';
 import type { PrismaClient } from '@knowledge-explorer/database';
+import { markUnpublishedChangesForLesson } from '@knowledge-explorer/database';
 import {
   AUDIO_RUN_MAX_SEGMENTS,
   AUDIO_SEGMENT_CONCURRENCY,
@@ -265,6 +266,10 @@ export function createAudioProcessor(
             sourceSegmentChecksum: checksums[index]!,
           })),
         });
+
+        // FR-PUB-03 (P6): a completed run replaces what a listener hears, so a
+        // published course now differs from the state its owner published.
+        await markUnpublishedChangesForLesson(tx, lessonId);
       });
 
       return {
