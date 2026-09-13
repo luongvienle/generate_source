@@ -1,7 +1,11 @@
 import { UnrecoverableError, type Job } from 'bullmq';
 import type { PrismaClient } from '@knowledge-explorer/database';
 import { loadPublishChecklistInput } from '@knowledge-explorer/database';
-import { errorCodes, type PublishCourseJobData } from '@knowledge-explorer/shared';
+import {
+  errorCodes,
+  revalidateLearnerPages,
+  type PublishCourseJobData,
+} from '@knowledge-explorer/shared';
 import { evaluatePublishChecklist } from '@knowledge-explorer/content';
 import { resolveCourseVoice } from '@knowledge-explorer/ai';
 import { buildStructurePayload, type SnapshotChapterRow } from './snapshot';
@@ -81,7 +85,14 @@ export function createPublishProcessor(prisma: PrismaClient): (job: Job) => Prom
     try {
       const course = await prisma.course.findUnique({
         where: { id: courseId },
-        select: { id: true, voiceIdentifier: true, voiceProviderName: true },
+        // slug and the category's slug feed NFR-01's revalidation hook below.
+        select: {
+          id: true,
+          slug: true,
+          voiceIdentifier: true,
+          voiceProviderName: true,
+          category: { select: { slug: true } },
+        },
       });
       if (!course) {
         throw new UnrecoverableError(`publish: course ${courseId} no longer exists`);
@@ -228,6 +239,21 @@ export function createPublishProcessor(prisma: PrismaClient): (job: Job) => Prom
           maxWait: PUBLISH_TRANSACTION_MAX_WAIT_MS,
         },
       );
+
+      /**
+       * NFR-01: the seam P6 left open. Fired AFTER the transaction commits, so
+       * the pages learner-web rebuilds read the course as published.
+       *
+       * Deliberately not awaited into the job's success: the return value is
+       * ignored and `revalidateLearnerPages` swallows every failure, because
+       * the publish is already durable. A cache that is briefly stale is a
+       * delay; a publish reported as failed after it committed is a lie, and
+       * would be retried into a second publish.
+       */
+      await revalidateLearnerPages({
+        courseSlug: course.slug,
+        categorySlug: course.category.slug,
+      });
 
       return {
         courseId,

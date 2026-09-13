@@ -11,6 +11,7 @@ import {
   allowedTransitionsFrom,
   canTransition,
   errorCodes,
+  revalidateLearnerPages,
   type PublicationStatus,
 } from '@knowledge-explorer/shared';
 import { evaluatePublishChecklist, type PublishChecklist } from '@knowledge-explorer/content';
@@ -99,6 +100,23 @@ export class PublishingService {
       where: { id: courseId },
       data: { publicationStatus: to, updatedAt: new Date() },
     });
+
+    /**
+     * NFR-01: unpublish and archive are SYNCHRONOUS transitions with no job
+     * behind them, so the publish worker's hook cannot cover them. A course
+     * that leaves the catalog while its cached page keeps serving is worse
+     * than a publish that takes a few minutes to appear, which is why this is
+     * here as well as in the worker.
+     *
+     * Awaited but never checked: `revalidateLearnerPages` swallows every
+     * failure by design. The transition has already been written.
+     */
+    if (to === 'unpublished' || to === 'archived' || to === 'published') {
+      await revalidateLearnerPages({
+        courseSlug: course.slug,
+        categorySlug: course.category.slug,
+      });
+    }
 
     return this.status(courseId);
   }
@@ -226,7 +244,14 @@ export class PublishingService {
   private async loadCourse(courseId: string) {
     const course = await this.prisma.client.course.findUnique({
       where: { id: courseId },
-      select: { id: true, publicationStatus: true, hasUnpublishedChanges: true, publishedAt: true },
+      select: {
+        id: true,
+        slug: true,
+        publicationStatus: true,
+        hasUnpublishedChanges: true,
+        publishedAt: true,
+        category: { select: { slug: true } },
+      },
     });
     if (!course) throw new NotFoundException({ errorCode: 'COURSE_NOT_FOUND' });
     return course;

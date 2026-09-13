@@ -3,3 +3,4 @@ export * from './roles';
 export * from './errors';
 export * from './queues';
 export * from './publication';
+export * from './revalidation';

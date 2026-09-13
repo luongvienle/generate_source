@@ -403,3 +403,53 @@ describe('FR-PUB-02 idempotency and versioning', () => {
     expect(structures[0]!.publishedVersionNumber).toBe(2);
   }, 90_000);
 });
+
+/**
+ * NFR-01's revalidation hook, and the property that matters most about it:
+ * it cannot fail a publish.
+ *
+ * By the time the hook runs the transaction has committed and the course IS
+ * published. A throw here would mark the job failed and, under NFR-03's retry,
+ * publish the course a second time — so every failure mode is swallowed by
+ * design, and this asserts it against the two that are easy to produce.
+ */
+describe('NFR-01 revalidation is best effort', () => {
+  it('still succeeds when learner-web is unreachable', async () => {
+    const previousUrl = process.env['LEARNER_WEB_URL'];
+    const previousSecret = process.env['REVALIDATE_SECRET'];
+    // A port nothing listens on: the fetch fails at connect.
+    process.env['LEARNER_WEB_URL'] = 'http://127.0.0.1:1';
+    process.env['REVALIDATE_SECRET'] = 'irrelevant-because-nothing-answers';
+
+    try {
+      const { courseId } = await seedPublishableCourse('revalidate-down');
+      expect((await publish(courseId)).state).toBe('completed');
+
+      // The publish itself is intact, which is the whole point.
+      const course = await prisma.course.findUnique({
+        where: { id: courseId },
+        select: { publicationStatus: true, hasUnpublishedChanges: true },
+      });
+      expect(course?.publicationStatus).toBe('published');
+      expect(course?.hasUnpublishedChanges).toBe(false);
+      expect(await prisma.publishedCourseStructure.findUnique({ where: { courseId } })).not.toBeNull();
+    } finally {
+      if (previousUrl === undefined) delete process.env['LEARNER_WEB_URL'];
+      else process.env['LEARNER_WEB_URL'] = previousUrl;
+      if (previousSecret === undefined) delete process.env['REVALIDATE_SECRET'];
+      else process.env['REVALIDATE_SECRET'] = previousSecret;
+    }
+  }, 90_000);
+
+  it('still succeeds when no revalidation is configured at all', async () => {
+    const previousUrl = process.env['LEARNER_WEB_URL'];
+    delete process.env['LEARNER_WEB_URL'];
+
+    try {
+      const { courseId } = await seedPublishableCourse('revalidate-unset');
+      expect((await publish(courseId)).state).toBe('completed');
+    } finally {
+      if (previousUrl !== undefined) process.env['LEARNER_WEB_URL'] = previousUrl;
+    }
+  }, 90_000);
+});
