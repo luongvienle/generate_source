@@ -81,6 +81,19 @@ export const errorCodes = {
   AUDIO_SEGMENT_TOO_LONG: 'AUDIO_SEGMENT_TOO_LONG',
   /** FR-AUDIO-03: the course's voice is not one the selected provider accepts. */
   AUDIO_VOICE_NOT_CONFIGURED: 'AUDIO_VOICE_NOT_CONFIGURED',
+  /**
+   * FR-PUB-01: one or more checklist items failed, so the course was not
+   * published. The 422 carries the whole checklist, not just the failures, so
+   * the panel can render the full list from the rejection alone.
+   */
+  PUBLISH_CHECKLIST_FAILED: 'PUBLISH_CHECKLIST_FAILED',
+  /** A publish run is already in flight for this course; the jobId travels with the 409. */
+  PUBLISH_IN_FLIGHT: 'PUBLISH_IN_FLIGHT',
+  /**
+   * §4.2: the requested move is not an edge of the publication state machine.
+   * The 409 names the current status and every status reachable from it.
+   */
+  INVALID_PUBLICATION_TRANSITION: 'INVALID_PUBLICATION_TRANSITION',
 } as const;
 
 export type ErrorCode = (typeof errorCodes)[keyof typeof errorCodes];

@@ -10,6 +10,7 @@
     "db:generate": "prisma generate"
   },
   "devDependencies": {
+    "@knowledge-explorer/content": "workspace:*",
     "@knowledge-explorer/shared": "workspace:*",
     "@types/pg": "^8.23.1",
     "dotenv": "^17.4.2",

@@ -297,6 +297,47 @@ describe('rows 8-9 — rule R-01, published-course lock', () => {
       .expect(200);
     expect(response.body).toMatchObject({ title: 'owner edit' });
   });
+
+  /**
+   * P6 extends R-01 to `publishing`. That window is exactly when a non-owner
+   * edit would corrupt the snapshot the publish job is copying, and before P6
+   * the guard recognised only `published` and let the write through.
+   */
+  it('treats a course mid-publish as published, for a non-owner', async () => {
+    const course = await prisma.course.create({
+      data: {
+        categoryId: ids.category,
+        slug: `publishing-${run}`,
+        levelLabel: 'N3',
+        levelOrder: 9,
+        title: 'Mid-publish course',
+        publicationStatus: 'publishing',
+      },
+      select: { id: true },
+    });
+    const chapter = await prisma.chapter.create({
+      data: { courseId: course.id, chapterOrder: 1, title: 'Chapter one' },
+      select: { id: true },
+    });
+    const lesson = await prisma.lesson.create({
+      data: { chapterId: chapter.id, lessonOrder: 1, title: 'Mid-publish lesson' },
+      select: { id: true },
+    });
+
+    const refused = await request(app.getHttpServer())
+      .patch(`/api/admin/lessons/${lesson.id}`)
+      .set(as(tokens.adminA))
+      .send({ title: 'admin edit during publish' })
+      .expect(403);
+    expect(refused.body.errorCode).toBe(errorCodes.FORBIDDEN_COURSE_PUBLISHED);
+
+    // The owner started the run and is not locked out of their own course.
+    await request(app.getHttpServer())
+      .patch(`/api/admin/lessons/${lesson.id}`)
+      .set(as(tokens.owner))
+      .send({ title: 'owner edit during publish' })
+      .expect(200);
+  });
 });
 
 describe('row 10 — disabling an admin takes effect immediately', () => {

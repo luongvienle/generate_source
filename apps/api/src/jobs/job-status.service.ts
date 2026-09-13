@@ -12,6 +12,7 @@ import { ImportQueue } from './import.queue';
 import { ImageQueue } from './image.queue';
 import { NarrationQueue } from './narration.queue';
 import { AudioQueue } from './audio.queue';
+import { PublishQueue } from './publish.queue';
 
 /**
  * One shape for every kind of job, so the SSE endpoints do not care which they
@@ -63,6 +64,13 @@ export const isTerminal = (snapshot: JobSnapshot): boolean =>
  * product has; this map holds the ones apps/api actually registered as
  * providers. A definition with no instance here is skipped rather than throwing,
  * which is the right answer for a queue this process does not produce to.
+ *
+ * THE COST OF FORGETTING IS A SILENT 404, not an error: `locate` skips the
+ * missing instance and falls through to the unprefixed import queue, which has
+ * no such job, so the stream reports "job not found" and a panel watching it
+ * hangs on its last known state. P6 was bitten by exactly this — the publish
+ * job ran and the course reached `published` while the browser still said
+ * `draft`. A new producer MUST be added here as well as to app.module.ts.
  */
 type QueueInstances = Partial<Record<QueueKey, Queue>>;
 
@@ -101,6 +109,7 @@ export class JobStatusService {
     @Inject(ImageQueue) private readonly imageQueue: ImageQueue,
     @Inject(NarrationQueue) private readonly narrationQueue: NarrationQueue,
     @Inject(AudioQueue) private readonly audioQueue: AudioQueue,
+    @Inject(PublishQueue) private readonly publishQueue: PublishQueue,
     @Inject(PrismaService) private readonly prisma: PrismaService,
   ) {}
 
@@ -110,6 +119,7 @@ export class JobStatusService {
       image: this.imageQueue.queue,
       narration: this.narrationQueue.queue,
       audio: this.audioQueue.queue,
+      publish: this.publishQueue.queue,
     };
   }
 

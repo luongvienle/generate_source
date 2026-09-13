@@ -6,3 +6,4 @@ export * from './blocks';
 export * from './block-identity';
 export * from './checksum';
 export * from './narration';
+export * from './publish-checklist';

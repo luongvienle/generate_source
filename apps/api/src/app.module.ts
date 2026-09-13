@@ -10,6 +10,8 @@ import { ChaptersController } from './content/chapters.controller';
 import { ImportController } from './content/import.controller';
 import { CategoriesController } from './content/categories.controller';
 import { CoursesController } from './content/courses.controller';
+import { PublishingController } from './content/publishing.controller';
+import { PublishingService } from './content/publishing.service';
 import { StructureService } from './content/structure.service';
 import { LessonsController } from './content/lessons.controller';
 import { LessonContentController } from './content/lesson-content.controller';
@@ -29,6 +31,7 @@ import { NarrationQueue } from './jobs/narration.queue';
 import { NarrationController } from './content/narration.controller';
 import { NarrationService } from './content/narration.service';
 import { AudioQueue } from './jobs/audio.queue';
+import { PublishQueue } from './jobs/publish.queue';
 import { AudioController } from './content/audio.controller';
 import { AudioService } from './content/audio.service';
 import { JobStatusService } from './jobs/job-status.service';
@@ -50,6 +53,7 @@ import { TEXT_TO_SPEECH_PROVIDER, createTextToSpeechProvider } from '@knowledge-
     ImportController,
     CategoriesController,
     CoursesController,
+    PublishingController,
     JobsController,
     CourseStreamController,
   ],
@@ -62,6 +66,7 @@ import { TEXT_TO_SPEECH_PROVIDER, createTextToSpeechProvider } from '@knowledge-
     NarrationService,
     AudioQueue,
     AudioService,
+    PublishQueue,
     JobStatusService,
     JobWatchGuard,
     InvitationService,
@@ -72,6 +77,7 @@ import { TEXT_TO_SPEECH_PROVIDER, createTextToSpeechProvider } from '@knowledge-
     AssignmentGuard,
     OwnerFieldGuard,
     StructureService,
+    PublishingService,
     LessonContentService,
     ImagesService,
     { provide: OBJECT_STORAGE, useFactory: () => new S3ObjectStorage(s3ConfigFromEnv()) },

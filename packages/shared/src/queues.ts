@@ -187,6 +187,41 @@ export const AUDIO_SEGMENT_CONCURRENCY = 4;
 export const AUDIO_RUN_MAX_SEGMENTS = 200;
 
 /**
+ * The publish queue (P6): the FIFTH producer, and the first whose target is a
+ * COURSE rather than a lesson or a category.
+ */
+export const PUBLISH_QUEUE_NAME = 'publish-course';
+
+export const publishJobNames = {
+  publish: 'publish',
+} as const;
+
+export type PublishJobName = (typeof publishJobNames)[keyof typeof publishJobNames];
+
+/**
+ * What a publish_course job carries.
+ *
+ * THE PREVIOUS STATUS TRAVELS WITH THE JOB, for the reason P5's voice does: it
+ * is resolved once, at enqueue, inside the same transaction that takes the
+ * `publishing` lock. `publishing` is a lock — R-01 treats it as `published` —
+ * so every way out of it must be defined, and a failed run has to restore what
+ * the course actually held rather than a status re-read afterwards. The
+ * load-bearing case is a re-publish of a LIVE course: if that fails it must
+ * return to `published`, because a failed job must never be able to withdraw
+ * content learners are reading.
+ *
+ * Nothing else travels. The course tree is unbounded where a status is small,
+ * and the worker re-reads and re-checks it anyway — that re-check is the point
+ * of running it there (specs/p6-publishing/spec.md).
+ */
+export interface PublishCourseJobData {
+  readonly generationJobId: string;
+  readonly courseId: string;
+  readonly createdByUserId: string;
+  readonly previousStatus: string;
+}
+
+/**
  * The four queues as data — the extraction the two notes above used to promise.
  *
  * WHAT WAS EXTRACTED, AND WHY ONLY THIS. P3's note predicted a shared shape at
@@ -212,7 +247,7 @@ export const AUDIO_RUN_MAX_SEGMENTS = 200;
  * last; `prefixedQueueDefinitions` and `unprefixedQueueDefinition` below exist
  * so no caller has to remember that.
  */
-export type QueueKey = 'import' | 'image' | 'narration' | 'audio';
+export type QueueKey = 'import' | 'image' | 'narration' | 'audio' | 'publish';
 
 export interface QueueDefinition {
   readonly key: QueueKey;
@@ -263,6 +298,14 @@ export const queueDefinitions: Readonly<Record<QueueKey, QueueDefinition>> = {
     idPrefix: 'audio:',
     retentionSeconds: 3_600,
     fallbackJobType: 'generate_audio',
+  },
+  publish: {
+    key: 'publish',
+    name: PUBLISH_QUEUE_NAME,
+    envVar: 'PUBLISH_QUEUE_NAME',
+    idPrefix: 'publish:',
+    retentionSeconds: 3_600,
+    fallbackJobType: 'publish_course',
   },
 } as const;
 

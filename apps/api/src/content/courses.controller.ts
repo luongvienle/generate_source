@@ -34,6 +34,47 @@ const voiceSchema = z.strictObject({
   voiceProviderName: z.string().min(1).nullable().optional(),
 });
 
+/**
+ * §8 course fields the P1 import leaves empty.
+ *
+ * FR-PUB-01 requires "the course has a category and a cover image" and NOTHING
+ * in the codebase could write `cover_image_url` before this endpoint — import
+ * does not set it and no PATCH accepted it, so the checklist item was
+ * unsatisfiable for every course that exists. The neighbouring §8 fields come
+ * with it rather than in a later one-field endpoint: they are the same kind of
+ * owner-set course metadata and §9.4's course page reads all of them.
+ *
+ * Every field is optional so a PATCH can carry one, and nullable so a value can
+ * be cleared — `strictObject` then refuses anything else, which is what keeps an
+ * admin from smuggling `assignedAdminId` through a metadata write.
+ */
+const courseMetadataSchema = z
+  .strictObject({
+    coverImageUrl: z.url().nullable().optional(),
+    overviewSummary: z.string().nullable().optional(),
+    prerequisites: z.array(z.string()).optional(),
+    learningObjectives: z.array(z.string()).optional(),
+    estimatedTotalMinutes: z.number().int().positive().nullable().optional(),
+  })
+  .refine((body) => Object.keys(body).length > 0, { message: 'at least one field is required' });
+
+/**
+ * The metadata PATCH's response, declared rather than inferred.
+ *
+ * `prerequisites` and `learningObjectives` are §8 JSONB columns, and letting
+ * TypeScript infer them pulls a path into @prisma/client's runtime types that
+ * tsc refuses as non-portable (TS2742). They are `unknown` here because that is
+ * what the column can actually hold; the admin panel parses them.
+ */
+interface CourseMetadataView {
+  readonly id: string;
+  readonly coverImageUrl: string | null;
+  readonly overviewSummary: string | null;
+  readonly prerequisites: unknown;
+  readonly learningObjectives: unknown;
+  readonly estimatedTotalMinutes: number | null;
+}
+
 const structureSchema = z.strictObject({
   chapters: z
     .array(
@@ -96,6 +137,44 @@ export class CoursesController {
     });
     if (!course) throw new NotFoundException({ errorCode: 'COURSE_NOT_FOUND' });
     return course;
+  }
+
+  /**
+   * Course metadata, owner-only by §3.
+   *
+   * Declares `createCategoriesAndCourses` rather than a new action: §3 assigns
+   * course creation and configuration to the owner alone and names no separate
+   * "edit course metadata" action, so P6 reuses the one §3 already has — the same
+   * reasoning P5 recorded for the voice endpoint below.
+   */
+  @Patch(':courseId')
+  @RequirePermission('createCategoriesAndCourses')
+  async setMetadata(
+    @Param('courseId') courseId: string,
+    @Body() body: unknown,
+  ): Promise<CourseMetadataView> {
+    const parsed = courseMetadataSchema.safeParse(body);
+    if (!parsed.success) throw new BadRequestException({ errorCode: 'INVALID_BODY' });
+
+    try {
+      return await this.prisma.client.course.update({
+        where: { id: courseId },
+        data: { ...parsed.data, updatedAt: new Date() },
+        select: {
+          id: true,
+          coverImageUrl: true,
+          overviewSummary: true,
+          prerequisites: true,
+          learningObjectives: true,
+          estimatedTotalMinutes: true,
+        },
+      });
+    } catch (error) {
+      if ((error as { code?: string }).code === 'P2025') {
+        throw new NotFoundException({ errorCode: 'COURSE_NOT_FOUND' });
+      }
+      throw error;
+    }
   }
 
   /** §9.2. Owner-only by §3. */

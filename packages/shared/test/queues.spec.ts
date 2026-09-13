@@ -7,6 +7,7 @@ import {
   JOB_BACKOFF_DELAY_MS,
   JOB_MAX_ATTEMPTS,
   NARRATION_QUEUE_NAME,
+  PUBLISH_QUEUE_NAME,
   prefixedQueueDefinitions,
   queueDefinitions,
   unprefixedQueueDefinition,
@@ -19,9 +20,9 @@ import {
  * empty import prefix — silently breaks id resolution if it is ever duplicated.
  */
 describe('queueDefinitions', () => {
-  it('declares the four queues P1 through P5 built', () => {
+  it('declares the five queues P1 through P6 built', () => {
     expect(Object.keys(queueDefinitions).sort()).toEqual(
-      (['audio', 'image', 'import', 'narration'] satisfies QueueKey[]).sort(),
+      (['audio', 'image', 'import', 'narration', 'publish'] satisfies QueueKey[]).sort(),
     );
   });
 
@@ -30,6 +31,7 @@ describe('queueDefinitions', () => {
     expect(queueDefinitions.image.name).toBe(IMAGE_QUEUE_NAME);
     expect(queueDefinitions.narration.name).toBe(NARRATION_QUEUE_NAME);
     expect(queueDefinitions.audio.name).toBe(AUDIO_QUEUE_NAME);
+    expect(queueDefinitions.publish.name).toBe(PUBLISH_QUEUE_NAME);
   });
 
   it('qualifies every id prefix except import, which P1 shipped unprefixed', () => {
@@ -37,6 +39,7 @@ describe('queueDefinitions', () => {
     expect(queueDefinitions.image.idPrefix).toBe('image:');
     expect(queueDefinitions.narration.idPrefix).toBe('script:');
     expect(queueDefinitions.audio.idPrefix).toBe('audio:');
+    expect(queueDefinitions.publish.idPrefix).toBe('publish:');
   });
 
   /**
@@ -52,9 +55,14 @@ describe('queueDefinitions', () => {
   });
 
   it('excludes the unprefixed queue from the prefixed list, so resolution order is safe', () => {
-    expect(prefixedQueueDefinitions).toHaveLength(3);
+    expect(prefixedQueueDefinitions).toHaveLength(4);
     expect(prefixedQueueDefinitions.every((d) => d.idPrefix !== '')).toBe(true);
-    expect(prefixedQueueDefinitions.map((d) => d.key).sort()).toEqual(['audio', 'image', 'narration']);
+    expect(prefixedQueueDefinitions.map((d) => d.key).sort()).toEqual([
+      'audio',
+      'image',
+      'narration',
+      'publish',
+    ]);
   });
 
   it('never gives two queues the same id prefix', () => {
@@ -66,6 +74,7 @@ describe('queueDefinitions', () => {
     const types = Object.values(queueDefinitions).map((d) => d.fallbackJobType);
     expect(new Set(types).size).toBe(types.length);
     expect(queueDefinitions.audio.fallbackJobType).toBe('generate_audio');
+    expect(queueDefinitions.publish.fallbackJobType).toBe('publish_course');
   });
 
   it('retains import for the dry-run TTL, since its result outlives the job', () => {

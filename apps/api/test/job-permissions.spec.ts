@@ -27,10 +27,9 @@ describe('permissionForJobType', () => {
         expect(mayWatch(jobType, 'admin_owner')).toBe(false);
       }
     }
-    // `generate_audio` was this assertion's example until P5 declared it. The
-    // property under test is unchanged — publish_course (P6) and
-    // send_expiry_reminder (P8) are still undeclared and still unwatchable.
-    expect(permissionForJobType('publish_course')).toBeUndefined();
+    // `generate_audio` was this assertion's example until P5 declared it, and
+    // `publish_course` until P6 did. The property under test is unchanged —
+    // send_expiry_reminder (P8) is still undeclared and still unwatchable.
     expect(permissionForJobType('send_expiry_reminder')).toBeUndefined();
   });
 });
@@ -45,6 +44,13 @@ describe('mayWatch', () => {
   it('still refuses an admin the owner-only import job', () => {
     expect(mayWatch('import_course_outline', 'admin')).toBe(false);
   });
+
+  it('refuses an admin the owner-only publish job (P6)', () => {
+    expect(permissionForJobType('publish_course')).toBe('publishOrUnpublishCourse');
+    expect(mayWatch('publish_course', 'admin_owner')).toBe(true);
+    expect(mayWatch('publish_course', 'admin')).toBe(false);
+    expect(mayWatch('publish_course', 'learner')).toBe(false);
+  });
 });
 
 describe('isLessonTargeted', () => {
@@ -56,5 +62,9 @@ describe('isLessonTargeted', () => {
   it('excludes import, whose target is a category', () => {
     expect(isLessonTargeted('import_course_outline')).toBe(false);
     expect(isLessonTargeted('dry_run')).toBe(false);
+  });
+
+  it('excludes publish, whose target is a course', () => {
+    expect(isLessonTargeted('publish_course')).toBe(false);
   });
 });

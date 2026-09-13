@@ -11,14 +11,17 @@ import { isAllowed, type JobType, type PermissionAction, type UserRole } from '@
  * PARTIAL, AND DENY-BY-DEFAULT. A job type with no row here is refused rather
  * than allowed, so a phase adding a producer without adding its row fails closed
  * — the same rule RolesGuard applies to an endpoint with no declared permission.
- * P6's publish_course and P8's send_expiry_reminder still inherit that guarantee,
- * and job-permissions.spec.ts holds it under test through them.
+ * P6 added publish_course below; P8's send_expiry_reminder still inherits the
+ * guarantee, and job-permissions.spec.ts holds it under test through it.
  */
 const jobPermissions: Partial<Record<JobType, PermissionAction>> = {
   import_course_outline: 'importCurriculumOutline',
   generate_image: 'generateAndSelectImages',
   generate_narration_script: 'generateAndEditNarrationScript',
   generate_audio: 'generateAudio',
+  // §3 gives publishing to the owner alone, so an admin watching a course stream
+  // sees their own image and audio jobs and never the owner's publish run.
+  publish_course: 'publishOrUnpublishCourse',
 };
 
 /** P1's dry run has no §8.1 job_type, and is part of the import flow. */
@@ -31,8 +34,8 @@ export function permissionForJobType(jobType: WatchableJobType): PermissionActio
 
 /**
  * Job types whose `target_entity_id` is a lesson, so R-02 applies to watching
- * them. Import targets a category and publish will target a course; neither is
- * assignment-scoped.
+ * them. Import targets a category and publish targets a course; neither is
+ * assignment-scoped, so neither appears here.
  */
 const lessonTargetedJobTypes: ReadonlySet<string> = new Set<WatchableJobType>([
   'generate_image',
