@@ -1,6 +1,7 @@
 import { getPrismaClient } from '@knowledge-explorer/database';
 import { auth } from '../../../../auth';
 import { CurriculumTree } from '../../../../components/curriculum-tree';
+import { PublishPanel } from '../../../../components/publish-panel';
 
 /**
  * The curriculum tree for one course.
@@ -20,5 +21,12 @@ export default async function CoursePage({ params }: { params: Promise<{ courseI
       })
     : null;
 
-  return <CurriculumTree courseId={courseId} isOwner={user?.userRole === 'admin_owner'} />;
+  const isOwner = user?.userRole === 'admin_owner';
+
+  return (
+    <>
+      <CurriculumTree courseId={courseId} isOwner={isOwner} />
+      <PublishPanel courseId={courseId} isOwner={isOwner} />
+    </>
+  );
 }
