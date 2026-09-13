@@ -165,3 +165,96 @@ describe('enforced behavior', () => {
     }
   });
 });
+
+/**
+ * P9's migration, held to the same standard as §8's hand-written DDL.
+ *
+ * `20260913185000_add_topic_request_duplicate_of` is hand-written for the reason
+ * its header records, so nothing regenerates it and nothing but these assertions
+ * would notice if it were lost.
+ */
+describe('topic request duplicate pointer (P9)', () => {
+  it('carries a self-referencing foreign key that NULLs on delete', async () => {
+    const { rows } = await db.query<{ confdeltype: string; reftable: string }>(
+      `select con.confdeltype, ref.relname as reftable
+         from pg_constraint con
+         join pg_class rel on rel.oid = con.conrelid
+         join pg_class ref on ref.oid = con.confrelid
+        where rel.relname = 'topic_requests'
+          and con.conname = 'topic_requests_duplicate_of_request_id_fkey'
+          and con.contype = 'f'`,
+    );
+    expect(rows, 'the duplicate_of foreign key is missing').toHaveLength(1);
+    // 'n' is SET NULL. 'a' (NO ACTION) here would turn a learner withdrawing a
+    // pending request that some duplicate names into a foreign-key error.
+    expect(rows[0]!.confdeltype, 'ON DELETE is not SET NULL').toBe('n');
+    expect(rows[0]!.reftable).toBe('topic_requests');
+  });
+
+  it.each(['idx_topic_requests_board', 'idx_topic_requests_requested_by'])(
+    '%s exists and is a plain non-unique index',
+    async (name) => {
+      const { rows } = await db.query<{ indisunique: boolean; def: string }>(
+        `select i.indisunique, pg_get_indexdef(i.indexrelid) as def
+           from pg_index i
+           join pg_class c on c.oid = i.indexrelid
+          where c.relname = $1`,
+        [name],
+      );
+      expect(rows, `${name} is missing`).toHaveLength(1);
+      expect(rows[0]!.indisunique, `${name} should not be unique`).toBe(false);
+    },
+  );
+
+  it('orders the board index by upvote_count descending', async () => {
+    const { rows } = await db.query<{ def: string }>(
+      `select indexdef as def from pg_indexes where indexname = 'idx_topic_requests_board'`,
+    );
+    expect(rows[0]!.def).toContain('request_status');
+    // Without DESC the index cannot serve the board's ordering, and the query
+    // still works — just sorted in memory, which is the silent version.
+    expect(rows[0]!.def).toMatch(/upvote_count DESC/);
+  });
+
+  /**
+   * Catalog presence proves the constraint exists. This proves it does the thing
+   * it was chosen for, which is the only reason it departs from the project's
+   * NoAction convention.
+   */
+  it('nulls the pointer when the duplicated-of request is deleted, rather than raising', async () => {
+    await db.query('BEGIN');
+    try {
+      const user = await db.query<{ id: string }>(
+        `insert into users (email_address, user_role) values ('t-req@example.test','learner') returning id`,
+      );
+      const userId = user.rows[0]!.id;
+
+      const original = await db.query<{ id: string }>(
+        `insert into topic_requests (requested_by_user_id, requested_topic_title)
+         values ($1, 'original') returning id`,
+        [userId],
+      );
+      const duplicate = await db.query<{ id: string }>(
+        `insert into topic_requests
+           (requested_by_user_id, requested_topic_title, request_status, duplicate_of_request_id)
+         values ($1, 'duplicate', 'duplicated', $2) returning id`,
+        [userId, original.rows[0]!.id],
+      );
+
+      await db.query(`delete from topic_requests where id = $1`, [original.rows[0]!.id]);
+
+      const { rows } = await db.query<{
+        duplicate_of_request_id: string | null;
+        request_status: string;
+      }>(`select duplicate_of_request_id, request_status from topic_requests where id = $1`, [
+        duplicate.rows[0]!.id,
+      ]);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]!.duplicate_of_request_id).toBeNull();
+      // The status survives: it is still a duplicate, of a request that is gone.
+      expect(rows[0]!.request_status).toBe('duplicated');
+    } finally {
+      await db.query('ROLLBACK');
+    }
+  });
+});

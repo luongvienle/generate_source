@@ -380,12 +380,33 @@ model TopicRequest {
   reviewedByUserId    String?  @map("reviewed_by_user_id") @db.Uuid
   linkedCourseId      String?  @map("linked_course_id") @db.Uuid
   createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  // Additive, not in §8: request_status carries `duplicated` and the §8 row has
+  // nowhere to say WHAT it duplicates — linked_course_id points at a course and
+  // reviewer_note is prose. P9 adds the pointer.
+  //
+  // SetNull, against the project-wide "NoAction where §8 omits it" convention,
+  // deliberately: a learner may withdraw a pending request, and that request may
+  // be some duplicate's target. NoAction turns that withdrawal into a foreign-key
+  // error the learner cannot act on. The cost is that the PATCH refinement
+  // guarantees a `duplicated` row points at something at REVIEW time, not
+  // forever; the queue renders a null target as "duplicate of a withdrawn
+  // request". Recorded in specs/p9-topic-requests/spec.md.
+  duplicateOfRequestId String? @map("duplicate_of_request_id") @db.Uuid
 
-  requestedByUser User               @relation("TopicRequestRequestedBy", fields: [requestedByUserId], references: [id], onDelete: Cascade)
-  reviewedByUser  User?              @relation("TopicRequestReviewedBy", fields: [reviewedByUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  linkedCourse    Course?            @relation(fields: [linkedCourseId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  votes           TopicRequestVote[]
+  requestedByUser    User               @relation("TopicRequestRequestedBy", fields: [requestedByUserId], references: [id], onDelete: Cascade)
+  reviewedByUser     User?              @relation("TopicRequestReviewedBy", fields: [reviewedByUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  linkedCourse       Course?            @relation(fields: [linkedCourseId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  duplicateOfRequest TopicRequest?      @relation("TopicRequestDuplicateOf", fields: [duplicateOfRequestId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  duplicateRequests  TopicRequest[]     @relation("TopicRequestDuplicateOf")
+  votes              TopicRequestVote[]
 
+  // The board and the owner queue both order by (status, upvotes desc), and the
+  // board is force-dynamic with no cache in front of it, so that query runs on
+  // every visit. The initial migration created no index on this table at all.
+  @@index([requestStatus, upvoteCount(sort: Desc)], map: "idx_topic_requests_board")
+  // The pending cap and /me/topic-requests both filter by submitter. Postgres
+  // creates no index for a foreign key on its own.
+  @@index([requestedByUserId], map: "idx_topic_requests_requested_by")
   @@map("topic_requests")
 }
 
