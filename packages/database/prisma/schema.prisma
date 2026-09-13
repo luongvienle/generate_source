@@ -87,6 +87,12 @@ model Course {
   estimatedTotalMinutes Int?      @map("estimated_total_minutes")
   coverImageUrl         String?   @map("cover_image_url")
   languageCode          String    @default("vi") @map("language_code")
+  // FR-AUDIO-03: one configured voice per course (P5). §8 defines no column for
+  // it, so these are added by a later migration, never by regenerating the init
+  // one. NULL means "use the install default" — TTS_DEFAULT_VOICE and the
+  // selected provider — so a fresh course narrates with nothing configured.
+  voiceProviderName     String?   @map("voice_provider_name")
+  voiceIdentifier       String?   @map("voice_identifier")
   pricingType           String    @default("free") @map("pricing_type")
   publicationStatus     String    @default("draft") @map("publication_status")
   hasUnpublishedChanges Boolean   @default(false) @map("has_unpublished_changes")
@@ -241,6 +247,11 @@ model AudioSegment {
   startMillisecond    Int     @map("start_millisecond")
   endMillisecond      Int     @map("end_millisecond")
   segmentAudioFileUrl String? @map("segment_audio_file_url")
+  // FR-AUDIO-01 re-synthesizes only stale segments, and §8 gives this table no
+  // checksum — so nothing linked a stored audio file to the narration text it
+  // voices and the requirement was unimplementable. Holds P4's segmentChecksum.
+  // NOT NULL with no default is safe: no code has ever written this table.
+  sourceSegmentChecksum String @map("source_segment_checksum")
 
   lessonAudio LessonAudio @relation(fields: [lessonAudioId], references: [id], onDelete: Cascade)
 

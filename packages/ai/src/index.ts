@@ -7,4 +7,7 @@ export * from './anthropic-llm.provider';
 export * from './fake-llm.provider';
 export * from './narration-prompt';
 export * from './narration-run';
+export * from './text-to-speech.provider';
+export * from './openai-tts.provider';
+export * from './fake-tts.provider';
 export * from './provider-factory';

@@ -1,9 +1,12 @@
 import { AnthropicLlmProvider } from './anthropic-llm.provider';
 import { FakeImageProvider } from './fake-image.provider';
 import { FakeLlmProvider } from './fake-llm.provider';
+import { FakeTextToSpeechProvider } from './fake-tts.provider';
 import type { ImageGenerationProvider } from './image-generation.provider';
 import type { LlmProvider } from './llm.provider';
 import { OpenAiImageProvider } from './openai-image.provider';
+import { OpenAiTextToSpeechProvider } from './openai-tts.provider';
+import type { TextToSpeechProvider } from './text-to-speech.provider';
 
 /**
  * Provider selection, by environment.
@@ -46,4 +49,26 @@ export function createLlmProvider(env: NodeJS.ProcessEnv = process.env): LlmProv
 
   const model = env['ANTHROPIC_MODEL'];
   return new AnthropicLlmProvider({ apiKey, ...(model ? { model } : {}) });
+}
+
+/**
+ * §11's TextToSpeechProvider (P5), selected the same way and for the same reason.
+ *
+ * `openai` with no key THROWS rather than falling back. P5's failure mode is the
+ * loudest of the three — a deployment serving fake audio plays a sine tone where
+ * a voice should be — but it is still only noticed by whoever listens, and by
+ * then the lesson has been published.
+ */
+export function createTextToSpeechProvider(
+  env: NodeJS.ProcessEnv = process.env,
+): TextToSpeechProvider {
+  if (env['TTS_PROVIDER'] !== 'openai') return new FakeTextToSpeechProvider();
+
+  const apiKey = env['OPENAI_API_KEY'];
+  if (!apiKey) {
+    throw new Error('TTS_PROVIDER=openai but OPENAI_API_KEY is not set');
+  }
+
+  const model = env['OPENAI_TTS_MODEL'];
+  return new OpenAiTextToSpeechProvider({ apiKey, ...(model ? { model } : {}) });
 }

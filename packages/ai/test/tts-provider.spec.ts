@@ -1,0 +1,261 @@
+import { execFile } from 'node:child_process';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { createServer, type Server } from 'node:http';
+import { AddressInfo } from 'node:net';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { promisify } from 'node:util';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import {
+  AUDIO_CONTENT_TYPE,
+  DEFAULT_OPENAI_TTS_MODEL,
+  FAKE_TTS_MODEL_NAME,
+  FAKE_TTS_PROVIDER_NAME,
+  FakeTextToSpeechProvider,
+  OPENAI_TTS_MAX_INPUT_CHARACTERS,
+  OPENAI_TTS_PROVIDER_NAME,
+  OpenAiTextToSpeechProvider,
+  createTextToSpeechProvider,
+  fakeDurationMs,
+  fakeFrequency,
+} from '../src/index';
+
+const run = promisify(execFile);
+
+/**
+ * §11's TextToSpeechProvider contract.
+ *
+ * The fake's assertions are on DURATION and FREQUENCY, never on bytes: the fake
+ * encodes with whatever ffmpeg the machine has, so byte-identity is a property
+ * of the build rather than of the code. Duration and frequency are what the
+ * timing work downstream actually depends on.
+ */
+
+/**
+ * Measures real MP3 bytes the way the worker will — no trust in the producer.
+ *
+ * Via a TEMP FILE, not a pipe. `execFile` has no `input` option (that belongs to
+ * `execFileSync`), so passing one silently does nothing and ffprobe blocks on an
+ * stdin that never closes — a 30-second timeout with no clue as to why. ffprobe
+ * also cannot seek a pipe, which makes container duration unreliable there even
+ * when it does return.
+ */
+async function probeDurationMs(bytes: Uint8Array): Promise<number> {
+  const directory = await mkdtemp(join(tmpdir(), 'ke-tts-'));
+  const file = join(directory, 'segment.mp3');
+  try {
+    await writeFile(file, bytes);
+    const { stdout } = await run(
+      'ffprobe',
+      [
+        '-hide_banner',
+        '-loglevel',
+        'error',
+        '-show_entries',
+        'format=duration',
+        '-of',
+        'default=noprint_wrappers=1:nokey=1',
+        file,
+      ],
+      { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 },
+    );
+    return Math.round(Number.parseFloat(stdout.trim()) * 1000);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+
+/**
+ * How far a real MP3's measured length may sit above the nominal tone length.
+ *
+ * An encoder adds delay and end padding that the mp3 muxer does not tag as
+ * gapless: measured during P5 at 1248 samples — about 52 ms at 24 kHz — for
+ * every file, regardless of its length. The tolerance is generous because the
+ * exact figure belongs to the ffmpeg build, and because nothing downstream
+ * depends on this number: the merge measures decoded samples rather than
+ * predicting from the nominal length. See fakeDurationMs.
+ */
+const MP3_PADDING_TOLERANCE_MS = 90;
+
+const request = (text: string) => ({ text, voiceIdentifier: 'alloy', languageCode: 'vi' });
+
+describe('FakeTextToSpeechProvider', () => {
+  const provider = new FakeTextToSpeechProvider();
+
+  it('emits real MP3 bytes whose duration matches its own prediction', async () => {
+    for (const text of ['Xin chào các bạn.', 'Hình 1 cho thấy sơ đồ mạch điện.', 'Bảng 2 liệt kê ba giá trị.']) {
+      const result = await provider.synthesize(request(text));
+
+      expect(result.bytes.byteLength).toBeGreaterThan(0);
+      expect(result.contentType).toBe(AUDIO_CONTENT_TYPE);
+
+      // The expectation comes from the exported pure function, not from the
+      // provider — otherwise this would compare the fake to itself. The file
+      // always runs LONGER than nominal, never shorter: padding is added, and
+      // asserting the direction catches a fake that silently truncates.
+      const measured = await probeDurationMs(result.bytes);
+      const nominal = fakeDurationMs(text);
+      expect(measured).toBeGreaterThanOrEqual(nominal);
+      expect(measured - nominal).toBeLessThanOrEqual(MP3_PADDING_TOLERANCE_MS);
+    }
+  }, 30_000);
+
+  it('is deterministic: the same text yields the same duration and frequency', async () => {
+    const text = 'Đoạn văn này được đọc hai lần.';
+
+    const first = await provider.synthesize(request(text));
+    const second = await provider.synthesize(request(text));
+
+    expect(await probeDurationMs(first.bytes)).toBe(await probeDurationMs(second.bytes));
+    expect(fakeFrequency(text)).toBe(fakeFrequency(text));
+  }, 30_000);
+
+  it('gives different segments different durations, so a merge is measurable', () => {
+    const durations = new Set(
+      ['one', 'two', 'three', 'four', 'five', 'six'].map((text) => fakeDurationMs(text)),
+    );
+    expect(durations.size).toBeGreaterThan(1);
+  });
+
+  it('reports the voice that answered, the fake provider name and a fake model name', async () => {
+    const result = await provider.synthesize(request('Một câu ngắn.'));
+
+    expect(result.voiceIdentifier).toBe('alloy');
+    expect(result.providerName).toBe(FAKE_TTS_PROVIDER_NAME);
+    // A row generated by the fake must never be mistaken for a real one.
+    expect(result.modelName).toBe(FAKE_TTS_MODEL_NAME);
+  }, 20_000);
+
+  it('counts characters from the input, since no endpoint reports usage', async () => {
+    const text = 'Đếm ký tự.';
+    const result = await provider.synthesize(request(text));
+    expect(result.characterCount).toBe(text.length);
+  }, 20_000);
+
+  it('refuses input over its limit rather than producing an oversized call', async () => {
+    await expect(provider.synthesize(request('a'.repeat(5_000)))).rejects.toThrow(
+      /exceeds maxInputCharacters/,
+    );
+  });
+
+  it('matches OpenAI’s documented cap, so preconditions agree across providers', () => {
+    expect(provider.maxInputCharacters).toBe(OPENAI_TTS_MAX_INPUT_CHARACTERS);
+  });
+});
+
+describe('OpenAiTextToSpeechProvider', () => {
+  let server: Server;
+  let endpoint: string;
+  let lastBody: Record<string, unknown> | undefined;
+  let status = 200;
+  const payload = Buffer.from('ID3-not-really-mp3-but-bytes-are-bytes');
+
+  beforeAll(async () => {
+    server = createServer((req, res) => {
+      const chunks: Buffer[] = [];
+      req.on('data', (chunk: Buffer) => chunks.push(chunk));
+      req.on('end', () => {
+        lastBody = JSON.parse(Buffer.concat(chunks).toString()) as Record<string, unknown>;
+        if (status !== 200) {
+          res.writeHead(status, { 'Content-Type': 'text/plain' });
+          res.end('voice not found');
+          return;
+        }
+        res.writeHead(200, { 'Content-Type': 'audio/mpeg' });
+        res.end(payload);
+      });
+    });
+    await new Promise<void>((done) => server.listen(0, '127.0.0.1', done));
+    endpoint = `http://127.0.0.1:${String((server.address() as AddressInfo).port)}/v1/audio/speech`;
+  });
+
+  afterAll(async () => {
+    await new Promise<void>((done) => server.close(() => done()));
+  });
+
+  it('sends the pinned model, the requested voice and mp3, and returns the bytes', async () => {
+    status = 200;
+    const provider = new OpenAiTextToSpeechProvider({ apiKey: 'sk-test', endpoint });
+
+    const result = await provider.synthesize({
+      text: 'Xin chào.',
+      voiceIdentifier: 'cedar',
+      languageCode: 'vi',
+    });
+
+    expect(lastBody).toMatchObject({
+      model: DEFAULT_OPENAI_TTS_MODEL,
+      input: 'Xin chào.',
+      voice: 'cedar',
+      response_format: 'mp3',
+    });
+
+    expect(Buffer.from(result.bytes).equals(payload)).toBe(true);
+    expect(result.contentType).toBe(AUDIO_CONTENT_TYPE);
+    expect(result.providerName).toBe(OPENAI_TTS_PROVIDER_NAME);
+    expect(result.modelName).toBe(DEFAULT_OPENAI_TTS_MODEL);
+    expect(result.voiceIdentifier).toBe('cedar');
+    expect(result.characterCount).toBe('Xin chào.'.length);
+  });
+
+  it('honours an overridden model', async () => {
+    status = 200;
+    const provider = new OpenAiTextToSpeechProvider({ apiKey: 'sk-test', endpoint, model: 'tts-1-hd' });
+
+    const result = await provider.synthesize(request('Một câu.'));
+
+    expect(lastBody).toMatchObject({ model: 'tts-1-hd' });
+    expect(result.modelName).toBe('tts-1-hd');
+  });
+
+  it('refuses over-long input BEFORE calling the endpoint', async () => {
+    status = 200;
+    lastBody = undefined;
+    const provider = new OpenAiTextToSpeechProvider({ apiKey: 'sk-test', endpoint });
+
+    await expect(
+      provider.synthesize(request('a'.repeat(OPENAI_TTS_MAX_INPUT_CHARACTERS + 1))),
+    ).rejects.toThrow(/4096/);
+
+    // The point of the check: no request was made, so nothing was billed.
+    expect(lastBody).toBeUndefined();
+  });
+
+  it('throws carrying the provider’s reason on a non-OK response', async () => {
+    status = 400;
+    const provider = new OpenAiTextToSpeechProvider({ apiKey: 'sk-test', endpoint });
+
+    await expect(provider.synthesize(request('Một câu.'))).rejects.toThrow(/400.*voice not found/s);
+    status = 200;
+  });
+});
+
+describe('createTextToSpeechProvider', () => {
+  it('selects the fake when TTS_PROVIDER is unset', () => {
+    expect(createTextToSpeechProvider({})).toBeInstanceOf(FakeTextToSpeechProvider);
+  });
+
+  it('selects the fake for any value that is not exactly `openai`', () => {
+    expect(createTextToSpeechProvider({ TTS_PROVIDER: 'fake' })).toBeInstanceOf(
+      FakeTextToSpeechProvider,
+    );
+    expect(createTextToSpeechProvider({ TTS_PROVIDER: 'OpenAI' })).toBeInstanceOf(
+      FakeTextToSpeechProvider,
+    );
+  });
+
+  it('selects the real adapter with a key', () => {
+    const provider = createTextToSpeechProvider({
+      TTS_PROVIDER: 'openai',
+      OPENAI_API_KEY: 'sk-test',
+    });
+    expect(provider).toBeInstanceOf(OpenAiTextToSpeechProvider);
+  });
+
+  /** A silent downgrade would serve a sine tone where a voice should be. */
+  it('THROWS on openai with no key rather than downgrading to the fake', () => {
+    expect(() => createTextToSpeechProvider({ TTS_PROVIDER: 'openai' })).toThrow(
+      /OPENAI_API_KEY is not set/,
+    );
+  });
+});
