@@ -24,6 +24,18 @@ export default async function PortalLayout({ children }: { children: ReactNode }
           <Link className="text-sky-700 hover:underline" href="/topic-requests">
             Topic requests
           </Link>
+          <Link className="text-sky-700 hover:underline" href="/products">
+            Products
+          </Link>
+          <Link className="text-sky-700 hover:underline" href="/discount-codes">
+            Discount codes
+          </Link>
+          <Link className="text-sky-700 hover:underline" href="/grants">
+            Grants
+          </Link>
+          <Link className="text-sky-700 hover:underline" href="/orders">
+            Orders
+          </Link>
         </nav>
         <span className="ml-auto text-slate-500">{session.user.email}</span>
       </header>
