@@ -1,4 +1,5 @@
 import { signIn } from '../../auth';
+import { safeCallbackPath } from '../../lib/safe-callback';
 
 /**
  * Self-serve sign-in and sign-up in one form.
@@ -11,16 +12,26 @@ import { signIn } from '../../auth';
  * visitor read a free course and any free-preview lesson, and the catalog is
  * open to everyone. Sign-in buys progress, resume and My Courses.
  */
-export default function SignInPage({
+export default async function SignInPage({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  /**
+   * Where the magic link lands afterwards — the checkout confirm page, when a
+   * learner was sent here from one. Relative same-origin paths only; see
+   * safe-callback.ts.
+   */
+  const callbackPath = safeCallbackPath((await searchParams)['callbackUrl']);
+
   async function requestLink(formData: FormData): Promise<void> {
     'use server';
     const email = String(formData.get('email') ?? '').trim();
     if (!email) return;
-    await signIn('email', { email, redirect: false });
+    // Re-validated here: a server action's input is whatever the browser posted,
+    // not what the page rendered into the hidden field.
+    const redirectTo = safeCallbackPath(formData.get('callbackUrl'));
+    await signIn('email', { email, redirect: false, ...(redirectTo ? { redirectTo } : {}) });
   }
 
   return (
@@ -32,6 +43,7 @@ export default function SignInPage({
       </p>
 
       <form action={requestLink} className="mt-6 flex flex-col gap-3" data-testid="signin-form">
+        {callbackPath ? <input type="hidden" name="callbackUrl" value={callbackPath} /> : null}
         <label htmlFor="email" className="text-sm font-medium">
           Địa chỉ email
         </label>

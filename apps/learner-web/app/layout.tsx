@@ -34,6 +34,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
               <Link href="/me/courses" className="hover:underline">
                 Khoá của tôi
               </Link>
+              <Link href="/me/orders" className="hover:underline">
+                Đơn hàng
+              </Link>
               <Link href="/requests" className="hover:underline">
                 Đề xuất chủ đề
               </Link>

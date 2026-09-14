@@ -7,9 +7,10 @@ import Link from 'next/link';
  * title — so no second request is needed and, more importantly, no part of the
  * lesson ever reaches this component to be accidentally rendered.
  *
- * There is no purchase action here: `POST /checkout` is P8's. The link back to
- * the course page is where a price will appear once products exist, which is
- * the same block FR-CAT-03 already renders when one does.
+ * There is no purchase action here, deliberately: the link goes to the course
+ * page, whose price block (FR-CAT-03) carries the buy links for every offer that
+ * covers this course — a single course and its bundle — rather than this
+ * component guessing which one the learner wants.
  */
 export function Paywall({ courseSlug, courseTitle }: { courseSlug: string; courseTitle: string }) {
   return (

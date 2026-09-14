@@ -42,9 +42,9 @@ export default async function CategoryPage({ params }: { params: Promise<{ slug:
       ) : null}
 
       {/*
-        FR-CAT-02: "if a bundle product exists, the bundle offer". P8 fills the
-        products table; until then this block is absent rather than a
-        placeholder, so P8 turns it on with no change here.
+        FR-CAT-02: "if a bundle product exists, the bundle offer". The block is
+        absent rather than a placeholder when none does. The buy link carries no
+        per-learner state, so this page stays ISR.
       */}
       {category.bundleOffer ? (
         <section className="mt-6 rounded border border-neutral-300 p-4" data-testid="bundle-offer">
@@ -53,6 +53,13 @@ export default async function CategoryPage({ params }: { params: Promise<{ slug:
           <p className="mt-1 text-sm text-neutral-600">
             Trọn bộ {category.displayName} · {category.bundleOffer.accessDurationDays} ngày truy cập
           </p>
+          <Link
+            href={`/checkout/${category.bundleOffer.productId}`}
+            className="mt-3 inline-block rounded bg-neutral-900 px-4 py-2 text-sm text-white"
+            data-testid="buy-bundle"
+          >
+            Mua trọn bộ
+          </Link>
         </section>
       ) : null}
 

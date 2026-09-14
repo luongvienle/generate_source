@@ -83,8 +83,12 @@ export default async function CoursePage({ params }: { params: Promise<{ slug: s
 
       {/*
         The price block queries the real products table and renders only when an
-        active row exists. P8 inserts products and this appears with no change
-        here; a paid course with no product shows the locked note below instead.
+        active row exists; a paid course with no product shows the locked note
+        below instead. A product write revalidates this page (P8a).
+
+        The buy links carry no per-learner state, so this page stays ISR and
+        anonymous-cacheable: whether it is a first purchase or a renewal, and what
+        the resulting expiry is, is decided on the confirm page.
       */}
       {course.singleCourseOffer || course.bundleOffer ? (
         <section className="mt-6 space-y-3" data-testid="price-block">
@@ -95,6 +99,13 @@ export default async function CoursePage({ params }: { params: Promise<{ slug: s
               <p className="mt-1 text-sm text-neutral-600">
                 {course.singleCourseOffer.accessDurationDays} ngày truy cập
               </p>
+              <Link
+                href={`/checkout/${course.singleCourseOffer.productId}`}
+                className="mt-3 inline-block rounded bg-neutral-900 px-4 py-2 text-sm text-white"
+                data-testid="buy-single"
+              >
+                Mua khoá học
+              </Link>
             </div>
           ) : null}
           {course.bundleOffer ? (
@@ -104,6 +115,13 @@ export default async function CoursePage({ params }: { params: Promise<{ slug: s
               <p className="mt-1 text-sm text-neutral-600">
                 Trọn bộ {course.categoryName} · {course.bundleOffer.accessDurationDays} ngày truy cập
               </p>
+              <Link
+                href={`/checkout/${course.bundleOffer.productId}`}
+                className="mt-3 inline-block rounded bg-neutral-900 px-4 py-2 text-sm text-white"
+                data-testid="buy-bundle"
+              >
+                Mua trọn bộ
+              </Link>
             </div>
           ) : null}
         </section>
