@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, type DynamicModule } from '@nestjs/common';
 import { HealthController } from './health/health.controller';
 import { JobsController } from './jobs/jobs.controller';
 import { CourseStreamController } from './jobs/course-stream.controller';
@@ -51,6 +51,20 @@ import { TopicRequestsLearnerController } from './public/topic-requests-learner.
 import { TopicRequestsService } from './public/topic-requests.service';
 import { TopicRequestsAdminController } from './topic-requests/topic-requests-admin.controller';
 import { TopicRequestsAdminService } from './topic-requests/topic-requests-admin.service';
+import { ProductsController } from './commerce/products.controller';
+import { ProductsService } from './commerce/products.service';
+import { GrantsAdminController } from './commerce/grants-admin.controller';
+import { GrantsAdminService } from './commerce/grants-admin.service';
+import { CheckoutController } from './commerce/checkout.controller';
+import { CheckoutService } from './commerce/checkout.service';
+import { PaymentWebhookController } from './commerce/webhook.controller';
+import { PurchaseService } from './commerce/purchase.service';
+import { FakePaymentPageController } from './commerce/fake-payment-page.controller';
+import { DiscountCodesController } from './commerce/discount-codes.controller';
+import { DiscountCodesService } from './commerce/discount-codes.service';
+import { OrdersAdminController } from './commerce/orders-admin.controller';
+import { createPaymentProvider } from './commerce/payment-provider.factory';
+import { PAYMENT_PROVIDER } from '@knowledge-explorer/commerce';
 
 @Module({
   controllers: [
@@ -89,6 +103,18 @@ import { TopicRequestsAdminService } from './topic-requests/topic-requests-admin
     PublicTopicRequestsController,
     TopicRequestsLearnerController,
     TopicRequestsAdminController,
+    /** P8a commerce (specs/p8a-commerce/spec.md): the owner's products and manual grants. */
+    ProductsController,
+    GrantsAdminController,
+    DiscountCodesController,
+    OrdersAdminController,
+    CheckoutController,
+    /**
+     * FR-COM-03's webhook. NO guard and NO permission: the caller is a payment
+     * gateway and its credential is the signature over the raw body. Asserted by
+     * name in commerce-webhook.e2e-spec.ts, like the public controllers above.
+     */
+    PaymentWebhookController,
   ],
   providers: [
     PrismaService,
@@ -119,6 +145,18 @@ import { TopicRequestsAdminService } from './topic-requests/topic-requests-admin
     ProgressService,
     TopicRequestsService,
     TopicRequestsAdminService,
+    ProductsService,
+    GrantsAdminService,
+    DiscountCodesService,
+    CheckoutService,
+    PurchaseService,
+    /**
+     * §11's PaymentProvider. Selected by environment once, at startup — and,
+     * unlike the image, LLM and TTS providers, NOT defaulting to its fake: an unset
+     * PAYMENT_PROVIDER closes the store rather than giving access away. See
+     * commerce/payment-provider.factory.ts.
+     */
+    { provide: PAYMENT_PROVIDER, useFactory: () => createPaymentProvider() },
     { provide: OBJECT_STORAGE, useFactory: () => new S3ObjectStorage(s3ConfigFromEnv()) },
     { provide: EMAIL_PROVIDER, useClass: LogEmailProvider },
     /**
@@ -130,4 +168,20 @@ import { TopicRequestsAdminService } from './topic-requests/topic-requests-admin
     { provide: TEXT_TO_SPEECH_PROVIDER, useFactory: () => createTextToSpeechProvider() },
   ],
 })
-export class AppModule {}
+export class AppModule {
+  /**
+   * AppModule plus the fake payment provider's hosted checkout page.
+   *
+   * CHOSEN AT BOOTSTRAP, NOT AT IMPORT. main.ts imports this file before it loads
+   * `.env`, so a `controllers` array that read PAYMENT_PROVIDER here would see an
+   * empty environment and the page would never register in development — with
+   * nothing to say why. main.ts selects this form after `loadEnv`, when
+   * `isFakePaymentEnabled()`; tests that exercise the page import it explicitly.
+   *
+   * Registration is only the first layer: the controller also answers a bare 404
+   * unless the bound provider is the fake.
+   */
+  static withFakePaymentPage(): DynamicModule {
+    return { module: AppModule, controllers: [FakePaymentPageController] };
+  }
+}

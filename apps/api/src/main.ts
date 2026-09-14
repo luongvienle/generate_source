@@ -3,12 +3,26 @@ import { config as loadEnv } from 'dotenv';
 import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
+import { isFakePaymentEnabled } from './commerce/payment-provider.factory';
 
 // Single .env at the repository root; this app runs two levels below it.
 loadEnv({ path: ['../../.env', '.env'] });
 
 async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create(AppModule);
+  /**
+   * The fake payment page is registered here, AFTER `.env` is loaded, and only on
+   * the explicit opt-in. Deciding it inside app.module.ts would read the
+   * environment before the line above runs. See AppModule.withFakePaymentPage.
+   */
+  const rootModule = isFakePaymentEnabled() ? AppModule.withFakePaymentPage() : AppModule;
+
+  /**
+   * `rawBody: true` keeps the request bytes beside the parsed JSON. FR-COM-03's
+   * webhook verifies its signature over exactly those bytes; re-serialized JSON
+   * would differ from what the gateway signed whenever its whitespace or key
+   * order differs from Node's (commerce/webhook.controller.ts).
+   */
+  const app = await NestFactory.create(rootModule, { rawBody: true });
   // §9 places every admin and public route under /api; health stays unprefixed
   // so liveness checks do not depend on the API's routing conventions.
   app.setGlobalPrefix('api', { exclude: ['health'] });

@@ -57,6 +57,10 @@ jobs:
       # Likewise for speech (P5). The fake emits real MP3 tones, so the merge and
       # its offset assertions run for real without a key.
       TTS_PROVIDER: fake
+      # P8a: the fake payment provider is opt-in, never a default — unset closes
+      # checkout. CI opts in explicitly, with a test-only webhook secret.
+      PAYMENT_PROVIDER: fake
+      PAYMENT_FAKE_WEBHOOK_SECRET: ci-only-fake-payment-secret-not-a-real-credential
 
     steps:
       - uses: actions/checkout@v4
