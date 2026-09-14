@@ -48,6 +48,7 @@ model User {
   accessGrants             AccessGrant[]              @relation("AccessGrantUser")
   grantedAccessGrants      AccessGrant[]              @relation("AccessGrantGrantedBy")
   paymentOrders            PaymentOrder[]
+  createdDiscountCodes     DiscountCode[]
   lessonProgress           LessonProgress[]
   requestedTopics          TopicRequest[]             @relation("TopicRequestRequestedBy")
   reviewedTopics           TopicRequest[]             @relation("TopicRequestReviewedBy")
@@ -296,6 +297,7 @@ model Product {
   createdByUser User           @relation(fields: [createdByUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   accessGrants  AccessGrant[]
   paymentOrders PaymentOrder[]
+  discountCodeProducts DiscountCodeProduct[]
 
   // CHECK constraint and the two partial unique indexes are hand-written SQL.
   @@map("products")
@@ -344,12 +346,61 @@ model PaymentOrder {
   rawWebhookPayload      Json?     @map("raw_webhook_payload")
   createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   completedAt            DateTime? @map("completed_at") @db.Timestamptz(6)
+  // Additive, not in §8 (P8a, specs/p8a-commerce/spec.md). `amount` is what the
+  // learner was charged; this is the product's price at checkout before any
+  // discount. NOT NULL with no default is safe: no code wrote this table before
+  // P8a.
+  listPriceAmount        Decimal   @map("list_price_amount") @db.Decimal(12, 2)
+  discountCodeId         String?   @map("discount_code_id") @db.Uuid
 
-  user    User    @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  product Product @relation(fields: [productId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  user         User          @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  product      Product       @relation(fields: [productId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  discountCode DiscountCode? @relation(fields: [discountCodeId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@unique([providerName, providerOrderReference])
+  // The hourly checkout cap and GET /me/orders read a learner's newest orders.
+  // idx_payment_orders_discount_paid (WHERE order_status = 'paid') is
+  // hand-written SQL in 20260914163500_add_discount_codes.
+  @@index([userId, createdAt(sort: Desc)], map: "idx_payment_orders_user_created")
   @@map("payment_orders")
+}
+
+// Additive, not in §8 (P8a, specs/p8a-commerce/spec.md): a percentage off
+// chosen products. Four CHECK constraints — percent range, uppercase code, a
+// positive cap, an ordered window — are hand-written SQL in
+// 20260914163500_add_discount_codes.
+model DiscountCode {
+  id                   String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  // Stored uppercase and matched case-insensitively by normalizing on input.
+  code                 String    @unique
+  percentOff           Int       @map("percent_off")
+  appliesToAllProducts Boolean   @default(false) @map("applies_to_all_products")
+  startsAt             DateTime? @map("starts_at") @db.Timestamptz(6)
+  endsAt               DateTime? @map("ends_at") @db.Timestamptz(6)
+  maxRedemptions       Int?      @map("max_redemptions")
+  oncePerLearner       Boolean   @default(false) @map("once_per_learner")
+  newPurchasesOnly     Boolean   @default(false) @map("new_purchases_only")
+  isActive             Boolean   @default(true) @map("is_active")
+  createdByUserId      String    @map("created_by_user_id") @db.Uuid
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  createdByUser User                  @relation(fields: [createdByUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  products      DiscountCodeProduct[]
+  paymentOrders PaymentOrder[]
+
+  @@map("discount_codes")
+}
+
+// The products a code applies to, when `applies_to_all_products` is false.
+model DiscountCodeProduct {
+  discountCodeId String @map("discount_code_id") @db.Uuid
+  productId      String @map("product_id") @db.Uuid
+
+  discountCode DiscountCode @relation(fields: [discountCodeId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  product      Product      @relation(fields: [productId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([discountCodeId, productId])
+  @@map("discount_code_products")
 }
 
 model LessonProgress {

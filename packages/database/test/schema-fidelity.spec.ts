@@ -43,6 +43,18 @@ const tablesInSpec8 = [
 
 const adapterTables = ['accounts', 'sessions', 'verification_tokens'];
 
+/**
+ * Tables a later phase added under an approved spec, each through its own
+ * hand-written migration rather than an edit to §8's.
+ *
+ * Declared by name rather than by loosening the check below: its purpose is
+ * that no table appears SILENTLY, and a named addition still satisfies that.
+ * An undeclared table keeps failing.
+ *
+ * P8a (specs/p8a-commerce/spec.md): discount codes are not in §5.9 or §8.
+ */
+const tablesAddedAfterSpec8 = ['discount_codes', 'discount_code_products'];
+
 /** §8's users table, column name -> information_schema data_type. */
 const usersColumnsInSpec8: Record<string, string> = {
   id: 'uuid',
@@ -80,12 +92,17 @@ describe('§8 tables', () => {
     expect(rows.map((r) => r.table_name).sort()).toEqual([...adapterTables].sort());
   });
 
-  it('adds no table beyond §8, the adapter, and Prisma bookkeeping', async () => {
+  it('adds no table beyond §8, the adapter, declared additions, and Prisma bookkeeping', async () => {
     const { rows } = await db.query<{ table_name: string }>(
       `select table_name from information_schema.tables
         where table_schema = 'public' and table_type = 'BASE TABLE'`,
     );
-    const allowed = new Set([...tablesInSpec8, ...adapterTables, '_prisma_migrations']);
+    const allowed = new Set([
+      ...tablesInSpec8,
+      ...adapterTables,
+      ...tablesAddedAfterSpec8,
+      '_prisma_migrations',
+    ]);
     const unexpected = rows.map((r) => r.table_name).filter((t) => !allowed.has(t));
     expect(unexpected).toEqual([]);
   });
@@ -148,9 +165,11 @@ describe('§8 type choices survive', () => {
       `select table_name, data_type, numeric_precision, numeric_scale
          from information_schema.columns
         where table_schema = 'public'
-          and (table_name, column_name) in (('products','price_amount'), ('payment_orders','amount'))`,
+          and (table_name, column_name) in (('products','price_amount'), ('payment_orders','amount'),
+                                            -- P8a: the pre-discount price an order was sold at.
+                                            ('payment_orders','list_price_amount'))`,
     );
-    expect(rows).toHaveLength(2);
+    expect(rows).toHaveLength(3);
     for (const r of rows) {
       expect(r.data_type).toBe('numeric');
       expect(r.numeric_precision).toBe(12);

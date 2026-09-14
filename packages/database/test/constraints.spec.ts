@@ -258,3 +258,113 @@ describe('topic request duplicate pointer (P9)', () => {
     }
   });
 });
+
+/**
+ * P8a's migration (specs/p8a-commerce/spec.md), held to the same standard.
+ *
+ * `20260914163500_add_discount_codes` appends four CHECK constraints and a
+ * partial index that schema.prisma cannot express, so these assertions are the
+ * only thing that would notice them missing.
+ */
+describe('discount codes and order pricing (P8a)', () => {
+  it.each([
+    'discount_codes_percent_off_check',
+    'discount_codes_code_uppercase_check',
+    'discount_codes_max_redemptions_check',
+    'discount_codes_window_check',
+  ])('discount_codes carries %s', async (constraint) => {
+    const { rows } = await db.query(
+      `select 1 from pg_constraint con
+         join pg_class rel on rel.oid = con.conrelid
+        where rel.relname = 'discount_codes' and con.conname = $1 and con.contype = 'c'`,
+      [constraint],
+    );
+    expect(rows, `${constraint} is missing`).toHaveLength(1);
+  });
+
+  it.each([
+    // 'a' is NO ACTION: an order keeps pointing at the code it was sold under.
+    ['payment_orders', 'payment_orders_discount_code_id_fkey', 'discount_codes', 'a'],
+    // 'c' is CASCADE: the join rows are meaningless without either side.
+    ['discount_code_products', 'discount_code_products_discount_code_id_fkey', 'discount_codes', 'c'],
+    ['discount_code_products', 'discount_code_products_product_id_fkey', 'products', 'c'],
+  ])('%s carries %s to %s with ON DELETE %s', async (table, constraint, refTable, action) => {
+    const { rows } = await db.query<{ confdeltype: string; reftable: string }>(
+      `select con.confdeltype, ref.relname as reftable
+         from pg_constraint con
+         join pg_class rel on rel.oid = con.conrelid
+         join pg_class ref on ref.oid = con.confrelid
+        where rel.relname = $1 and con.conname = $2 and con.contype = 'f'`,
+      [table, constraint],
+    );
+    expect(rows, `${constraint} is missing`).toHaveLength(1);
+    expect(rows[0]!.reftable).toBe(refTable);
+    expect(rows[0]!.confdeltype).toBe(action);
+  });
+
+  it('orders idx_payment_orders_user_created by created_at descending', async () => {
+    const { rows } = await db.query<{ def: string }>(
+      `select indexdef as def from pg_indexes where indexname = 'idx_payment_orders_user_created'`,
+    );
+    expect(rows, 'idx_payment_orders_user_created is missing').toHaveLength(1);
+    expect(rows[0]!.def).toMatch(/user_id, created_at DESC/);
+  });
+
+  it('scopes idx_payment_orders_discount_paid to paid orders', async () => {
+    const { rows } = await db.query<{ indisunique: boolean; def: string }>(
+      `select i.indisunique, pg_get_indexdef(i.indexrelid) as def
+         from pg_index i join pg_class c on c.oid = i.indexrelid
+        where c.relname = 'idx_payment_orders_discount_paid'`,
+    );
+    expect(rows, 'idx_payment_orders_discount_paid is missing').toHaveLength(1);
+    expect(rows[0]!.indisunique).toBe(false);
+    // Without the predicate a redemption count would still be right, just
+    // served by a larger index — the silent version.
+    expect(rows[0]!.def).toMatch(/WHERE \(order_status = 'paid'::text\)/);
+  });
+
+  describe('enforced behavior', () => {
+    let ownerId = '';
+
+    beforeAll(async () => {
+      await db.query('BEGIN');
+      const user = await db.query<{ id: string }>(
+        `insert into users (email_address, user_role)
+         values ('t-codes@example.test','admin_owner') returning id`,
+      );
+      ownerId = user.rows[0]!.id;
+    });
+
+    afterAll(async () => {
+      await db.query('ROLLBACK');
+    });
+
+    const insertCode = (code: string, percentOff: number) =>
+      db.query(
+        `insert into discount_codes (code, percent_off, created_by_user_id) values ($1, $2, $3)`,
+        [code, percentOff, ownerId],
+      );
+
+    it.each([0, 101])('rejects percent_off = %i', async (percentOff) => {
+      await db.query('SAVEPOINT s');
+      await expect(insertCode(`PCT${percentOff}`, percentOff)).rejects.toThrow(
+        /discount_codes_percent_off_check/,
+      );
+      await db.query('ROLLBACK TO SAVEPOINT s');
+    });
+
+    it('rejects a code that is not stored uppercase', async () => {
+      await db.query('SAVEPOINT s');
+      await expect(insertCode('welcome10', 10)).rejects.toThrow(
+        /discount_codes_code_uppercase_check/,
+      );
+      await db.query('ROLLBACK TO SAVEPOINT s');
+    });
+
+    it('accepts 100 percent, which is a zero-amount order rather than a free grant', async () => {
+      await db.query('SAVEPOINT s');
+      await expect(insertCode('FREE100', 100)).resolves.toBeDefined();
+      await db.query('ROLLBACK TO SAVEPOINT s');
+    });
+  });
+});
