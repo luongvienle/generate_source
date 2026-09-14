@@ -4,6 +4,19 @@ import { config as loadEnv } from 'dotenv';
 loadEnv({ path: ['../../.env', '.env'] });
 
 /**
+ * P8a's commerce scenario buys through the FAKE payment provider, which is opt-in
+ * and never a code default (an unset PAYMENT_PROVIDER closes checkout). Defaulted
+ * here, after `.env`, so the suite does not depend on a developer's `.env`
+ * holding the right values: the api web server below is a child process and
+ * inherits these. An explicitly set PAYMENT_PROVIDER still wins.
+ *
+ * `e2e/helpers.ts` signs replayed and tampered webhooks with the same secret.
+ */
+process.env['PAYMENT_PROVIDER'] ??= 'fake';
+process.env['PAYMENT_FAKE_WEBHOOK_SECRET'] ||= 'learner-e2e-only-fake-payment-secret';
+process.env['API_PUBLIC_URL'] ||= 'http://localhost:3001';
+
+/**
  * The learner browser suite.
  *
  * Kept out of `turbo run test` — the package script is `test:e2e`, not `test` —

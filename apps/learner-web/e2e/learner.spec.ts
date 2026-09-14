@@ -96,15 +96,19 @@ test('1. the owner publishes the course through the checklist and the publish jo
     return (await response.json()).items as { id: string; passed: boolean; reason: string }[];
   };
 
-  // §5.7 item 7 needs an active product, and P8 owns products — so a paid
-  // course cannot pass the checklist yet. Selling it as free is what an owner
-  // without a price would do, and it is restored below.
-  if ((await readChecklist()).some((item) => item.id === 'active_product_for_paid' && !item.passed)) {
-    await request.patch(`${API}/api/admin/courses/${course.courseId}/pricing-type`, {
-      headers: adminCookie(owner.token),
-      data: { pricingType: 'free' },
-    });
-  }
+  // §5.7 item 7: a paid course needs an active product before it may publish.
+  // Until P8a nothing could create one, and this test sold the course as free
+  // and flipped it back afterwards. Now the owner prices it, as a real one would.
+  const product = await request.post(`${API}/api/admin/products`, {
+    headers: adminCookie(owner.token),
+    data: {
+      productType: 'single_course',
+      courseId: course.courseId,
+      displayName: `Tiếng Nhật N5 ${run}`,
+      priceAmount: '200000',
+    },
+  });
+  expect(product.status()).toBe(201);
 
   // Fail with the offending items rather than with a bare 422 from the publish.
   const stillFailing = (await readChecklist()).filter((item) => !item.passed);
@@ -119,19 +123,14 @@ test('1. the owner publishes the course through the checklist and the publish jo
 
   const published = await prisma.course.findUniqueOrThrow({
     where: { id: course.courseId },
-    select: { publicationStatus: true },
+    select: { publicationStatus: true, pricingType: true },
   });
   expect(published.publicationStatus).toBe('published');
+  // Paid throughout: the checklist passed on the product, not on a pricing flip.
+  expect(published.pricingType).toBe('paid');
   expect(
     await prisma.publishedCourseStructure.findUnique({ where: { courseId: course.courseId } }),
   ).not.toBeNull();
-
-  // The course is free, so make the gated lesson genuinely gated again: the
-  // scenario below is about entitlement, and a free course entitles everyone.
-  await prisma.course.update({
-    where: { id: course.courseId },
-    data: { pricingType: 'paid' },
-  });
 });
 
 test('2. the catalog lists the course anonymously, and search finds it', async ({ page }) => {
@@ -151,7 +150,7 @@ test('2. the catalog lists the course anonymously, and search finds it', async (
   await expect(page.getByTestId('catalog-empty')).toBeVisible();
 });
 
-test('3. the course page shows the snapshot table of contents and no price block', async ({
+test('3. the course page shows the snapshot table of contents and its price block', async ({
   page,
 }) => {
   await page.goto(`/courses/${course.courseSlug}`);
@@ -159,10 +158,10 @@ test('3. the course page shows the snapshot table of contents and no price block
   await expect(page.getByTestId('toc-lesson-link')).toHaveCount(6);
   await expect(page.getByTestId('free-preview-badge')).toHaveCount(1);
 
-  // No products exist until P8, so the price block is absent rather than a
-  // placeholder — and the paid course says plainly that it is not on sale.
-  await expect(page.getByTestId('price-block')).toHaveCount(0);
-  await expect(page.getByTestId('not-for-sale')).toBeVisible();
+  // Test 1 priced the course through the product endpoint (P8a), so the block
+  // P7 built renders from the real row — and the not-for-sale state does not.
+  await expect(page.getByTestId('price-block')).toBeVisible();
+  await expect(page.getByTestId('not-for-sale')).toHaveCount(0);
 });
 
 test('4. a free-preview lesson reads anonymously, and its figure actually loads', async ({

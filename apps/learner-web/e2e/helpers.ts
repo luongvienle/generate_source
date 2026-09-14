@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, createHmac, randomBytes } from 'node:crypto';
 import { expect, type Page } from '@playwright/test';
 import { getPrismaClient } from '@knowledge-explorer/database';
 
@@ -87,7 +87,14 @@ export async function signInAsLearner(page: Page, email: string): Promise<void> 
   await expect(page.getByRole('heading', { name: 'Khoá của tôi' })).toBeVisible();
 }
 
-/** P8 owns grant creation; until then the suite writes the row it would. */
+/**
+ * Seeds a grant row directly, for P7's scenario.
+ *
+ * P7 predates any endpoint that creates a grant, and its scenario is about
+ * entitlement rather than about buying: backdating a grant past expiry (§7.4)
+ * has no product path at all. P8a's purchase and manual-grant flows are proven
+ * through their real endpoints in commerce.spec.ts.
+ */
 export async function grantAccess(
   userId: string,
   courseId: string,
@@ -108,6 +115,43 @@ export async function grantAccess(
     select: { id: true },
   });
   return grant.id;
+}
+
+/**
+ * Signs a raw webhook body exactly as the fake payment provider does: hex
+ * HMAC-SHA256 of the bytes, under PAYMENT_FAKE_WEBHOOK_SECRET (defaulted in
+ * playwright.config.ts, which the api web server inherits).
+ *
+ * Reimplemented with node:crypto rather than imported from packages/commerce, so
+ * this package gains no dependency on server-only code for five lines. The
+ * format is `signFakeWebhook` in packages/commerce/src/fake-payment-provider.ts.
+ */
+export function signWebhook(rawBody: string): string {
+  return createHmac('sha256', process.env['PAYMENT_FAKE_WEBHOOK_SECRET'] ?? '')
+    .update(rawBody)
+    .digest('hex');
+}
+
+export const FAKE_PAYMENT_SIGNATURE_HEADER = 'x-fake-payment-signature';
+
+/**
+ * Completes a real Auth.js magic link, landing on `callbackPath` rather than My
+ * Courses — the checkout scenario returns to the confirm page it started from.
+ */
+export async function completeMagicLink(page: Page, email: string, callbackPath: string): Promise<void> {
+  const raw = randomBytes(32).toString('hex');
+  const secret = process.env['AUTH_SECRET'] ?? '';
+  await prisma.verificationToken.create({
+    data: {
+      identifier: email,
+      token: createHash('sha256').update(`${raw}${secret}`).digest('hex'),
+      expires: new Date(Date.now() + 10 * 60_000),
+    },
+  });
+  await page.goto(
+    `/api/auth/callback/email?token=${raw}&email=${encodeURIComponent(email)}` +
+      `&callbackUrl=${encodeURIComponent(callbackPath)}`,
+  );
 }
 
 export { prisma };

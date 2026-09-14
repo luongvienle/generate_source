@@ -97,25 +97,40 @@ export async function seedCourse(options: {
   pricingType: 'free' | 'paid';
   title: string;
   overview: string;
+  /**
+   * Put the course in an existing category instead of creating one. P8a's
+   * scenario needs two paid courses in one category, to sell them singly and as
+   * a bundle. Omitted, the behaviour is exactly P7's.
+   */
+  categoryId?: string;
+  /** Defaults to 1 for a paid course and 2 for a free one, as P7 seeded them. */
+  levelOrder?: number;
+  /** Distinguishes two courses of the same pricing type within one run. */
+  slugSuffix?: string;
 }): Promise<SeededCourse> {
   const storage = new S3ObjectStorage(s3ConfigFromEnv());
   const audioBytes = generateMp3(6);
 
-  const category = await prisma.category.create({
-    data: {
-      slug: `p7-${options.run}`,
-      displayName: `Tiếng Nhật ${options.run}`,
-      displayOrder: 0,
-    },
-    select: { id: true, slug: true },
-  });
+  const category = options.categoryId
+    ? await prisma.category.findUniqueOrThrow({
+        where: { id: options.categoryId },
+        select: { id: true, slug: true },
+      })
+    : await prisma.category.create({
+        data: {
+          slug: `p7-${options.run}`,
+          displayName: `Tiếng Nhật ${options.run}`,
+          displayOrder: 0,
+        },
+        select: { id: true, slug: true },
+      });
 
   const course = await prisma.course.create({
     data: {
       categoryId: category.id,
-      slug: `p7-${options.run}-${options.pricingType}`,
+      slug: `p7-${options.run}-${options.pricingType}${options.slugSuffix ? `-${options.slugSuffix}` : ''}`,
       levelLabel: 'N5',
-      levelOrder: options.pricingType === 'paid' ? 1 : 2,
+      levelOrder: options.levelOrder ?? (options.pricingType === 'paid' ? 1 : 2),
       title: options.title,
       overviewSummary: options.overview,
       learningObjectives: ['Đọc được bảng chữ cái', 'Viết đúng thứ tự nét'],
