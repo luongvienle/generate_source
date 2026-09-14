@@ -136,6 +136,86 @@ export const errorCodes = {
   TOPIC_REQUEST_DUPLICATE_TARGET_INVALID: 'TOPIC_REQUEST_DUPLICATE_TARGET_INVALID',
   /** §9.2: `linkedCourseId` names no course. */
   TOPIC_REQUEST_LINKED_COURSE_NOT_FOUND: 'TOPIC_REQUEST_LINKED_COURSE_NOT_FOUND',
+
+  // --- P8a commerce (specs/p8a-commerce/spec.md) ------------------------------
+
+  /** No courses row with this id. Older controllers throw the same string as a literal. */
+  COURSE_NOT_FOUND: 'COURSE_NOT_FOUND',
+  /** No categories row with this id. */
+  CATEGORY_NOT_FOUND: 'CATEGORY_NOT_FOUND',
+  /** No products row with this id — or, at checkout, one that is not active, which is not for sale. */
+  PRODUCT_NOT_FOUND: 'PRODUCT_NOT_FOUND',
+  /**
+   * §7.1: at most one active product per course and one per category, held by a
+   * partial unique index. The 409 carries the existing product's id.
+   */
+  PRODUCT_ALREADY_ACTIVE: 'PRODUCT_ALREADY_ACTIVE',
+  /** FR-COM-01's price-check compares a BUNDLE to its courses; a single product has nothing to compare. */
+  PRICE_CHECK_NOT_BUNDLE: 'PRICE_CHECK_NOT_BUNDLE',
+  /** Discount codes are unique case-insensitively; this one exists in some casing. */
+  DISCOUNT_CODE_ALREADY_EXISTS: 'DISCOUNT_CODE_ALREADY_EXISTS',
+  /** No such code, or it has been deactivated. */
+  DISCOUNT_CODE_NOT_FOUND: 'DISCOUNT_CODE_NOT_FOUND',
+  /** The code's validity window has not started or has ended. */
+  DISCOUNT_CODE_OUTSIDE_WINDOW: 'DISCOUNT_CODE_OUTSIDE_WINDOW',
+  /** The code does not apply to this product. */
+  DISCOUNT_CODE_NOT_APPLICABLE: 'DISCOUNT_CODE_NOT_APPLICABLE',
+  /** The code's paid redemptions have reached `max_redemptions`. */
+  DISCOUNT_CODE_EXHAUSTED: 'DISCOUNT_CODE_EXHAUSTED',
+  /** The code is once-per-learner and this learner already paid with it. */
+  DISCOUNT_CODE_ALREADY_USED: 'DISCOUNT_CODE_ALREADY_USED',
+  /**
+   * The code is for new purchases only, and this checkout would extend the
+   * learner's same-scope grant while it is still active. A lapsed grant does not
+   * count: a returning learner may use it.
+   */
+  DISCOUNT_CODE_NEW_PURCHASES_ONLY: 'DISCOUNT_CODE_NEW_PURCHASES_ONLY',
+  /** A single-course product whose course is not on the published track; nobody can buy what the catalog hides. */
+  CHECKOUT_COURSE_NOT_PUBLISHED: 'CHECKOUT_COURSE_NOT_PUBLISHED',
+  /** §7.3: a free course needs no grant, so paying for one buys nothing. */
+  CHECKOUT_COURSE_FREE: 'CHECKOUT_COURSE_FREE',
+  /** A bundle whose category has no published course. */
+  CHECKOUT_BUNDLE_EMPTY: 'CHECKOUT_BUNDLE_EMPTY',
+  /**
+   * The learner holds perpetual, owner-granted access to this scope — or, for a
+   * single course, to its category — and can never lose it.
+   */
+  CHECKOUT_ALREADY_PERPETUAL: 'CHECKOUT_ALREADY_PERPETUAL',
+  /**
+   * Stacking one more term (§7.4) would bank more than two terms ahead of today.
+   * The 409 carries `currentExpiresAt` and `renewableFrom`.
+   */
+  CHECKOUT_TERM_TOO_LONG: 'CHECKOUT_TERM_TOO_LONG',
+  /** The learner created CHECKOUT_HOURLY_CAP orders in the trailing hour. An abuse brake, not an invariant. */
+  CHECKOUT_RATE_LIMITED: 'CHECKOUT_RATE_LIMITED',
+  /** PAYMENT_PROVIDER is unset or unknown: the store is closed rather than faked. */
+  PAYMENT_PROVIDER_UNAVAILABLE: 'PAYMENT_PROVIDER_UNAVAILABLE',
+  /** The provider refused or failed to create a checkout; the pending order was marked failed. */
+  PAYMENT_PROVIDER_ERROR: 'PAYMENT_PROVIDER_ERROR',
+  /** FR-COM-03: the webhook's signature does not verify over the raw body. Nothing was written. */
+  WEBHOOK_SIGNATURE_INVALID: 'WEBHOOK_SIGNATURE_INVALID',
+  /**
+   * A wiring fault, answered with 500: the app was built without `rawBody: true`,
+   * so the bytes the signature covers are gone. Never "fixed" by verifying the
+   * re-serialized body instead — that passes every self-signed test and fails
+   * against a real gateway.
+   */
+  WEBHOOK_RAW_BODY_MISSING: 'WEBHOOK_RAW_BODY_MISSING',
+  /** No payment_orders row with this id — or one belonging to someone else, indistinguishably. */
+  ORDER_NOT_FOUND: 'ORDER_NOT_FOUND',
+  /** No account has this email. FR-COM-04's manual grant does not create one. */
+  USER_NOT_FOUND: 'USER_NOT_FOUND',
+  /** Access grants are for learners; an owner or admin account cannot hold one. */
+  GRANT_TARGET_NOT_LEARNER: 'GRANT_TARGET_NOT_LEARNER',
+  /**
+   * The learner already holds an un-revoked grant for this scope (§8's partial
+   * unique index allows one). The 409 carries it; the owner revokes it first.
+   */
+  GRANT_ALREADY_EXISTS: 'GRANT_ALREADY_EXISTS',
+  /** No access_grants row with this id. */
+  GRANT_NOT_FOUND: 'GRANT_NOT_FOUND',
+  /** A manual grant's expiry date has already ended in Asia/Ho_Chi_Minh. */
+  GRANT_EXPIRY_IN_PAST: 'GRANT_EXPIRY_IN_PAST',
 } as const;
 
 export type ErrorCode = (typeof errorCodes)[keyof typeof errorCodes];
