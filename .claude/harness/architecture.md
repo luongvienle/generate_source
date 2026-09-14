@@ -30,8 +30,12 @@ elements are only partly built:
   `TextToSpeechProvider` (`packages/ai`, an OpenAI speech adapter over plain
   `fetch` — no SDK, following P3's image adapter — plus a fake selected by
   `TTS_PROVIDER` that emits REAL MP3 tones so the merge and its offsets are
-  exercised without a paid call) [verified]. Only `PaymentProvider` (P8) still
-  has no interface.
+  exercised without a paid call) [verified]. P8a adds `PaymentProvider`
+  (`packages/commerce/src/payment-provider.ts`) with a deterministic fake and an
+  `UnavailablePaymentProvider` — and **no real gateway**, because §14 decision 1 is
+  still open [verified]. Unlike the other fakes it is opt-in: only
+  `PAYMENT_PROVIDER=fake` binds it; unset closes checkout (see
+  `specs/p8a-commerce/`).
 
 **Not** microservices: the apps share one database and one Prisma schema
 [verified]. **Not** feature-based: `apps/api/src` is organised by technical
@@ -98,8 +102,12 @@ segments carry a per-segment checksum and `audio_segments.source_segment_checksu
 holds it back, which is what makes FR-AUDIO-01's per-segment re-synthesis
 possible; neither `script_status` nor `audio_status` is ever stored as `stale` —
 §6.5 says staleness is computed on read, so the API derives both [verified]. The
-§4.3 draft/published split and all of §7's commerce exist only as tables. No code
-reads or writes them.
+§4.3 draft/published split is built (P6/P7), and §7's commerce is written by P8a:
+owner products, discount codes and manual grants under `apps/api/src/commerce/`;
+checkout creating pending `payment_orders`; and the webhook, the only writer of
+purchase grants, which stacks expiry with `stackExpiry` under a per-learner, per-scope
+advisory lock. Entitlement is still read only through `isGrantActive` in
+`packages/commerce` [verified]. The expiry-reminder job (§7.5) is P8b's.
 
 **ffmpeg is a runtime dependency of `apps/worker` since P5** [verified].
 `apps/worker/src/audio/ffmpeg.ts` is the only place the worker spawns a process;

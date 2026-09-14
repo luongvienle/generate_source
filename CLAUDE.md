@@ -16,9 +16,10 @@ time-limited access. pnpm + Turborepo monorepo, TypeScript, PostgreSQL, NestJS, 
   **durable progress state**: tick boxes as work completes, not at the end.
 
 Phases P0 (auth/schema), P1 (curriculum import), P2 (authoring/blocks), P3 (images),
-P4 (narration) and P5 (audio) are done. P6 onward (publishing, learner app, commerce) is
-unbuilt — those tables exist in the schema and no code reads them. `.claude/harness/` holds a
-longer generated reference.
+P4 (narration), P5 (audio), P6 (publishing), P7 (learner app), P9 (topic requests) and P8a
+(commerce: products, discount codes, checkout, the payment webhook, manual grants) are done.
+P8b (a real `EmailProvider` and the expiry-reminder job) and P10 (operations) are unbuilt.
+`.claude/harness/` holds a longer generated reference.
 
 ## Commands
 
@@ -145,8 +146,11 @@ above an illustrated one orphans the illustration (the image is never destroyed,
 §11's provider interfaces, bound through Symbol tokens: `EmailProvider` (logs to stdout),
 `ImageGenerationProvider` (`packages/ai`, OpenAI adapter + deterministic fake chosen by
 `IMAGE_PROVIDER`; `openai` without a key throws rather than downgrading), `ObjectStorage`
-(`packages/storage`, S3/MinIO, bucket created lazily). `LlmProvider` (P4), `TextToSpeechProvider`
-(P5) and `PaymentProvider` (P8) do not exist yet.
+(`packages/storage`, S3/MinIO, bucket created lazily), `LlmProvider` (P4) and
+`TextToSpeechProvider` (P5), both in `packages/ai` with fakes chosen the same way.
+`PaymentProvider` (P8a, `packages/commerce`) has **only a fake**: §14 decision 1, the gateway, is
+still open. Its fake hosted page delivers a signed webhook to `/api/webhooks/payment` over HTTP,
+so the real verification path runs in every test.
 
 ## Invariants that fail silently
 
@@ -167,6 +171,13 @@ above an illustrated one orphans the illustration (the image is never destroyed,
    `SignatureDoesNotMatch`. They coincide locally only because nothing runs inside Compose.
 6. **Prisma and next-auth versions are pinned exactly** (7.10.0 / 5.0.0-beta.32); upgrading
    either needs review.
+7. **The fake payment provider is opt-in, never a default** — unlike the image, LLM and TTS
+   fakes. Only `PAYMENT_PROVIDER=fake` binds it (and requires `PAYMENT_FAKE_WEBHOOK_SECRET`);
+   unset closes checkout with 503. Its hosted page is registered in `main.ts` *after* `.env`
+   loads, via `AppModule.withFakePaymentPage()` — `main.ts` imports `AppModule` before loading
+   `.env`, so an env read inside `app.module.ts` sees nothing and the page silently never
+   registers. The webhook verifies `request.rawBody` (`rawBody: true` in `main.ts` and in every
+   test app that posts webhooks); never "fix" a missing raw body by verifying re-serialized JSON.
 
 ## Conventions
 

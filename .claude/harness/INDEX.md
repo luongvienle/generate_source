@@ -18,9 +18,11 @@ through `packages/content`. Recorded in `specs/p3-images/spec.md` [verified]. Ph
 product spec is complete: the §8 database schema, Auth.js magic-link sign-in
 with database sessions, and the §3 permission matrix enforced by a
 deny-by-default guard chain in `apps/api` [verified]. P1 (curriculum import), P2 (the lesson
-editor and block parser) and P3 (images) are complete [verified]. Everything
-from P4 onward — narration, audio, publishing, the learner app and commerce —
-is unbuilt; those tables exist and no code reads them. Two documents govern the work and outrank anything inferred
+editor and block parser) and P3 (images) are complete [verified]. P4 through P7
+(narration, audio, publishing, the learner app), P9 (topic requests) and P8a
+(commerce: products, discount codes, checkout, the payment webhook, manual grants,
+with a fake `PaymentProvider` only) have since landed — see each `specs/p*/tasks.md`
+for its implementation notes. P8b (email and expiry reminders) and P10 are unbuilt. Two documents govern the work and outrank anything inferred
 from code: `knowledge-explorer-spec.md` (the locked product spec) and the
 per-phase `specs/` directories.
 
@@ -101,7 +103,8 @@ runtime and workspace tool — are now `[verified]` facts. What remains:
   course-level column exists [verified]. Enforcement is row-level by an
   explicit decision recorded in `assignment.guard.ts`; whether an unassigned
   lesson should inherit its chapter's assignment is undecided.
-- The payment gateway — §14 names it as the only open decision blocking P8.
+- The payment gateway — §14 decision 1, still open. P8a shipped without it by
+  building the port and a fake; a real adapter is one class plus its env selection.
 
 ## Notes
 
